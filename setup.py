@@ -7,6 +7,6 @@ setup(
     package_dir={"": "src"},
     install_requires=[
         "datasets >= 2.4.0",
-        'rime @ git+https://github.com/awslabs/recurrent-intensity-model-experiments@main',
+        'recurrent-intensity-model-experiments @ git+https://github.com/awslabs/recurrent-intensity-model-experiments@main',
     ],
 )
