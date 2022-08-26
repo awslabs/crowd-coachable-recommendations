@@ -20,7 +20,8 @@ from rime.models.zero_shot import ItemKNN
 # return the precison evaluated on the prime_pantry data set
 def VAE_precision(model, item_df, event_df, user_df, 
                     embed_size = 768,
-                    model_checkpoint = "distilbert-base-uncased"):
+                    model_checkpoint = "distilbert-base-uncased",
+                    batch_size=64):
     D = rime.dataset.Dataset(user_df, item_df, event_df, sample_with_prior=1e5)
     D._k1 = 1
     relevance = rime.Experiment(D)
