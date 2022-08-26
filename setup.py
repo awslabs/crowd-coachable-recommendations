@@ -6,7 +6,10 @@ setup(
     packages=find_packages(where="src", exclude=("test",)),
     package_dir={"": "src"},
     install_requires=[
-        # please install the latest version of rime.
         "datasets >= 2.4.0",
+        "recurrent-intensity-model-experiments",
     ],
+    dependency_links=[
+        'git+https://github.com/awslabs/recurrent-intensity-model-experiments.git#egg=recurrent-intensity-model-experiments',
+    ]
 )
