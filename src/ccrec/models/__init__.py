@@ -2,7 +2,6 @@ import dataclasses
 import numpy as np
 import rime
 from rime.util import LazyScoreModel, auto_cast_lazy_score
-from .graph_vae import GraphVAE
 
 
 @dataclasses.dataclass

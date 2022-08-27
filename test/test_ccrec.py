@@ -42,22 +42,12 @@ def graph_conv_factory(D, **kw):
         **kw)
 
 
-def graph_vae_factory(D, **kw):
-    return ccrec.models.GraphVAE(
-        D, sample_with_prior=True, sample_with_posterior=0, user_rec=False,
-        user_conv_model='plain_average', truncated_input_steps=1,
-        training_prior_fcn=lambda x: (x + 0.1 / x.shape[1]).clip(0, None).log(),
-        item_weight_beta=0.01, item_weight_prior=-9, item_bias_beta=0.01,
-        **kw)
-
-
 def empirical_average_factory(D, **kw):
     return ccrec.models.EmpiricalAverageModel(D.user_df.index, D.item_df.index, **kw)
 
 
 @pytest.mark.parametrize("model_factory", [
     graph_conv_factory,
-    # graph_vae_factory,
 ])
 @pytest.mark.flaky(max_runs=2, min_passes=1)
 def test_oracle(model_factory):
@@ -126,7 +116,7 @@ def test_simplest(working_model_cls, n_steps=20, test_every=1, epsilon=0.5,
 
 @pytest.mark.parametrize("data_factory, working_model_cls, epsilon", [
     (create_simple_dataset, graph_conv_factory, 0.1),
-    (create_simple_dataset, graph_vae_factory, 'dual'),
+    (create_simple_dataset, graph_conv_factory, 'dual'),
     pytest.param(create_ml_1m_interactive, graph_conv_factory, 0.1, marks=[
         pytest.mark.skipif(not os.path.exists('data/ml-1m/ratings.dat'), reason="data not available"),
         pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda not available")
