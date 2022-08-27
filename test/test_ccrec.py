@@ -1,9 +1,9 @@
 import pandas as pd, numpy as np, scipy.sparse as sps, os, pylab as pl
 import torch, torch.nn.functional as F
-import pytest, dataclasses, rime, irec, irec.models
+import pytest, dataclasses, rime, ccrec, ccrec.models
 from rime.dataset import create_dataset_unbiased
 from rime.util import extract_user_item, auto_cast_lazy_score
-from irec import agent, env, InteractiveExperiment
+from ccrec import agent, env, InteractiveExperiment
 
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
@@ -43,7 +43,7 @@ def graph_conv_factory(D, **kw):
 
 
 def graph_vae_factory(D, **kw):
-    return irec.models.GraphVAE(
+    return ccrec.models.GraphVAE(
         D, sample_with_prior=True, sample_with_posterior=0, user_rec=False,
         user_conv_model='plain_average', truncated_input_steps=1,
         training_prior_fcn=lambda x: (x + 0.1 / x.shape[1]).clip(0, None).log(),
@@ -52,7 +52,7 @@ def graph_vae_factory(D, **kw):
 
 
 def empirical_average_factory(D, **kw):
-    return irec.models.EmpiricalAverageModel(D.user_df.index, D.item_df.index, **kw)
+    return ccrec.models.EmpiricalAverageModel(D.user_df.index, D.item_df.index, **kw)
 
 
 @pytest.mark.parametrize("model_factory", [

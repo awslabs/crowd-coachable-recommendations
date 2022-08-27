@@ -2,8 +2,8 @@ import os, warnings, dataclasses, torch, time, socket, json, io, typing, shap
 import pandas as pd, numpy as np, scipy.sparse as sps
 from pprint import pprint
 from rime.util import indices2csr, auto_tensor, timed, auto_device
-from irec.env.base import Env, _expand_na_class
-from irec.util.shap_explainer import I2IExplainer, plot_shap_values
+from ccrec.env.base import Env, _expand_na_class
+from ccrec.util.shap_explainer import I2IExplainer, plot_shap_values
 import multiprocessing, functools
 try:
     import boto3

@@ -3,12 +3,12 @@ from torch.utils.data import DataLoader
 from datasets import Dataset, DatasetDict
 from transformers import AutoTokenizer
 from pytorch_lightning import LightningDataModule, Trainer
-from irec.models.vae_models import MaskedPretrainedModel, VAEPretrainedModel
+from ccrec.models.vae_models import MaskedPretrainedModel, VAEPretrainedModel
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 import rime
 from rime.util import _LitValidated
 from rime.models.zero_shot import ItemKNN
-from irec.env import create_zero_shot, parse_response
+from ccrec.env import create_zero_shot, parse_response
 
 
 class VAETower(_LitValidated):

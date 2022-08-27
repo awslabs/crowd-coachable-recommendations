@@ -1,10 +1,10 @@
 import pandas as pd, numpy as np, torch
 from sklearn.feature_extraction.text import TfidfVectorizer
-import pytest, rime, irec, irec.models, irec.models.bbpr
-from irec import InteractiveExperiment, env
-from irec.env import create_zero_shot, Env, parse_response
-from irec.env.i2i_env import get_notebook_name
-from irec.models.vae_models import VAEPretrainedModel
+import pytest, rime, ccrec, ccrec.models, ccrec.models.bbpr
+from ccrec import InteractiveExperiment, env
+from ccrec.env import create_zero_shot, Env, parse_response
+from ccrec.env.i2i_env import get_notebook_name
+from ccrec.models.vae_models import VAEPretrainedModel
 
 
 def _shorten_brand_name_function(x):
@@ -74,7 +74,7 @@ def get_collection_response(response_file='prime-pantry-i2i-online-baseline4-res
 
 
 @pytest.mark.skip(reason='requires data')
-def test_prime_pantry_irec(
+def test_prime_pantry_ccrec(
     simulation=True,
     pretrained_checkpoint=None,
     train_requests=None,  # subsample training queries
@@ -109,7 +109,7 @@ def test_prime_pantry_irec(
     ])
 
     if working_model is None:
-        working_model = irec.models.bbpr.BertBPR(
+        working_model = ccrec.models.bbpr.BertBPR(
             item_df, max_epochs=max_epochs, batch_size=10 * torch.cuda.device_count(),
             sample_with_prior=True, sample_with_posterior=0, elementwise_affine=False,
             replacement=False, n_negatives=5, valid_n_negatives=5,
@@ -121,7 +121,7 @@ def test_prime_pantry_irec(
 
     if simulation:
         training_env_kw = {
-            'oracle': irec.agent.Agent(tfidf_model),
+            'oracle': ccrec.agent.Agent(tfidf_model),
             'prefix': 'pp-simu-train',
             'soft_label': False,
             'reserve_score': 0.1,

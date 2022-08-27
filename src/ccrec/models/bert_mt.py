@@ -1,15 +1,15 @@
 import numpy as np, torch, torch.nn.functional as F, tqdm, os, pandas as pd
 from pytorch_lightning.trainer.supporters import CombinedLoader
-from irec.models.bbpr import (
+from ccrec.models.bbpr import (
     _Tower, _BertBPR, sps_to_torch, _device_mode_context, auto_device, BertBPR,
     AutoTokenizer, TensorBoardLogger, empty_cache_on_exit, _DataModule, Trainer,
     LightningDataModule, DataLoader, auto_cast_lazy_score, I2IExplainer,
     default_random_split, _LitValidated)
-from irec.models.vae_models import MaskedPretrainedModel, VAEPretrainedModel
+from ccrec.models.vae_models import MaskedPretrainedModel, VAEPretrainedModel
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
-from irec.models.vae_lightning import VAEData
+from ccrec.models.vae_lightning import VAEData
 import rime
-from irec.env import create_zero_shot, parse_response
+from ccrec.env import create_zero_shot, parse_response
 
 
 class _TowerMT(_Tower):

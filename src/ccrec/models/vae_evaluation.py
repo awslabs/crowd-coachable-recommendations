@@ -11,7 +11,7 @@ sys.modules['sklearn.externals.joblib'] = joblib
 sys.path.append("recurrent-intensity-model-experiments/src")
 sys.path.append("InteractiveRecommendation/src")
 
-import rime, irec
+import rime
 from rime.models.zero_shot import ItemKNN
 
 # need a VAE model. For example, 

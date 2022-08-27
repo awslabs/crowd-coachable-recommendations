@@ -1,7 +1,7 @@
 import os, warnings, dataclasses, collections, itertools, time, functools, typing
 import pandas as pd, numpy as np, scipy.sparse as sps
 from pytorch_lightning.loggers import TensorBoardLogger
-from irec.util import merge_unique
+from ccrec.util import merge_unique
 from rime.dataset import Dataset
 from rime.util import indices2csr, perplexity, matrix_reindex
 
@@ -57,7 +57,7 @@ class Env:
     user_df: pd.DataFrame
     item_df: pd.DataFrame
     event_df: pd.DataFrame = None
-    prefix: str = 'irec-env-'
+    prefix: str = 'ccrec-env-'
     sample_size: int = 2
     recording: bool = True
     test_requests: pd.DataFrame = None  # allow multiple requests per user when recording is off

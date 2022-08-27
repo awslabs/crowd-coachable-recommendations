@@ -1,6 +1,6 @@
 import pandas as pd, numpy as np
-import pytest, rime, irec, irec.models
-from irec import InteractiveExperiment, env
+import pytest, rime, ccrec, ccrec.models
+from ccrec import InteractiveExperiment, env
 
 
 @pytest.mark.skip(reason='manually test the validity of online oracles')
@@ -26,7 +26,7 @@ def test_run(
         rime.util.LazyDenseMatrix(title_one_hot) @ title_one_hot.T * 10,
         tie_breaker=0.01)
     # working_model = graph_conv_factory(D).fit()
-    working_model = irec.models.EmpiricalAverageModel(D.user_df.index, D.item_df.index).fit()
+    working_model = ccrec.models.EmpiricalAverageModel(D.user_df.index, D.item_df.index).fit()
     baseline_model = rime.util.LazyScoreModel(user_df.index, item_df.index, tie_breaker=0.01)
 
     iexp = InteractiveExperiment(

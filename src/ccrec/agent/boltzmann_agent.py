@@ -2,7 +2,7 @@ import dataclasses, torch, time, os, tqdm, typing
 import pandas as pd, numpy as np, scipy.sparse as sps
 from torch.distributions.categorical import Categorical
 from rime.util import auto_device, empty_cache_on_exit, score_op
-from irec.agent.base import Agent
+from ccrec.agent.base import Agent
 
 
 def softmax_sample(S, k, replacement=False, shuffle=True):

@@ -9,8 +9,8 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 import functools, torch, numpy as np, pandas as pd
 import os, itertools, dataclasses, warnings, collections, re, tqdm
-from irec.util import _device_mode_context
-from irec.util.shap_explainer import I2IExplainer
+from ccrec.util import _device_mode_context
+from ccrec.util.shap_explainer import I2IExplainer
 
 # https://pytorch-lightning.readthedocs.io/en/stable/notebooks/lightning_examples/text-transformers.html
 

@@ -2,10 +2,10 @@ import dataclasses, torch, time, os, operator, typing, functools, tqdm
 import pandas as pd, numpy as np, scipy.sparse as sps
 import torch.nn.functional as F
 from rime.util import _assign_topk, auto_device, auto_cast_lazy_score, empty_cache_on_exit, RandScore
-from irec.agent.base import Agent
-from irec.util import merge_unique
+from ccrec.agent.base import Agent
+from ccrec.util import merge_unique
 from transformers import AutoTokenizer
-from irec.models.vae_models import EmbeddingModel
+from ccrec.models.vae_models import EmbeddingModel
 
 
 @dataclasses.dataclass
