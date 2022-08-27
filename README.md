@@ -1,11 +1,6 @@
-## My Project
+## Crowd Coachable Recommendations (CCRec)
 
-TODO: Fill this README out!
-
-Be sure to:
-
-* Change the title in this README
-* Edit your repository description on GitHub
+Codes for zero-shot recommendations and subsequent online learning and exploration with crowd-sourced preference labels.
 
 ## Security
 
