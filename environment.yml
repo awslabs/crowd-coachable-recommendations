@@ -4,3 +4,4 @@ channels:
   - dglteam
 dependencies:
   - pytest
+  - dgl
