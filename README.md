@@ -1,5 +1,7 @@
 ## Crowd Coachable Recommendations (CCRec)
 
+![pytest workflow](https://github.com/awslabs/recurrent-intensity-model-experiments/actions/workflows/python-app.yml/badge.svg)
+
 Codes for zero-shot recommendations and subsequent online learning and exploration with crowd-sourced preference labels.
 
 ## Getting Started
