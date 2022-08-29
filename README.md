@@ -10,7 +10,7 @@ Codes for zero-shot recommendations and subsequent online learning and explorati
 ## Contributing
 
 * Write access is managed. Please use pull requests to introduce any changes.
-* Automated tests will be run against every pull request / push commit. If it fails, please check the log for an ssh location to log-in and debug.
+* Automated tests will be run against every pull request / push commit. If any of them fail, please check the log for an ssh location where you may log in and debug.
 
 ## Security
 
