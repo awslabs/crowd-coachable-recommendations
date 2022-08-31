@@ -12,7 +12,9 @@ def test_sample_data():
     return get_item_df()
 
 
+@pytest.mark.parametrize("nrows", [100])
 def test_prime_pantry_ccrec(
+    nrows,  # None
     simulation=True,
     pretrained_checkpoint=None,
     train_requests=None,  # subsample training queries
@@ -37,6 +39,8 @@ def test_prime_pantry_ccrec(
     """
 
     item_df, tfidf_csr = get_item_df()
+    if nrows is not None:
+        item_df = item_df.head(nrows)
     zero_shot = create_zero_shot(item_df)
     user_df = zero_shot.user_df
 
