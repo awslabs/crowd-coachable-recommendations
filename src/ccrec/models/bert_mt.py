@@ -116,10 +116,12 @@ class BertMT(BertBPR):
     def __init__(self, item_df, batch_size=10,
                  model_name='distilbert-base-uncased', max_length=30,
                  max_epochs=10, max_steps=-1, do_validation=None,
-                 strategy='dp', query_item_position_in_user_history=0,
+                 strategy=None, query_item_position_in_user_history=0,
                  **_model_kw):
         if do_validation is None:
             do_validation = max_epochs > 1
+        if strategy is None:
+            strategy = 'dp' if torch.cuda.device_count() > 1 else None,
 
         self.item_titles = item_df['TITLE']
         self.max_length = max_length

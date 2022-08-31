@@ -12,14 +12,15 @@ def test_sample_data():
     return get_item_df()
 
 
-@pytest.mark.parametrize("nrows", [100])
+@pytest.mark.parametrize("nrows", [10])
+@pytest.mark.parametrize("max_epochs", [0])
 def test_prime_pantry_ccrec(
     nrows,  # None
+    max_epochs,  # choose 0 to skip retraining
     simulation=True,
     pretrained_checkpoint=None,
     train_requests=None,  # subsample training queries
     epsilon=0,
-    max_epochs=0,  # choose 0 to skip retraining
     role_arn=None,
     s3_prefix=None,
     working_model=None,  # VAEPretrainedModel
@@ -38,7 +39,7 @@ def test_prime_pantry_ccrec(
         epsilon='vae'
     """
 
-    item_df, tfidf_csr = get_item_df(nrows)
+    item_df, tfidf_csr = get_item_df(nrows=nrows)
     zero_shot = create_zero_shot(item_df)
     user_df = zero_shot.user_df
 
