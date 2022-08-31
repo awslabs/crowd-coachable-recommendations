@@ -210,12 +210,14 @@ class BertBPR:
     def __init__(self, item_df, freeze_bert=0, batch_size=None,
                  model_name='bert-base-uncased', max_length=128,
                  max_epochs=10, max_steps=-1, do_validation=None,
-                 strategy='dp', query_item_position_in_user_history=0,
+                 strategy=None, query_item_position_in_user_history=0,
                  **kw):
         if batch_size is None:
             batch_size = 10000 if freeze_bert > 0 else 10
         if do_validation is None:
             do_validation = max_epochs > 1
+        if strategy is None:
+            strategy = 'dp' if torch.cuda.device_count() > 1 else None
 
         self.item_titles = item_df['TITLE']
         self._model_kw = {"freeze_bert": freeze_bert, "do_validation": do_validation, **kw}
@@ -233,7 +235,7 @@ class BertBPR:
         )
         self.model = _BertBPR(self.all_inputs, **self._model_kw)
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
-        self.predict_batch_size = 64 * torch.cuda.device_count()
+        self.predict_batch_size = 6 * self.batch_size
 
         self._ckpt_dirpath = []
         self._logger = TensorBoardLogger('logs', "BertBPR")

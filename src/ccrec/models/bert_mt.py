@@ -86,7 +86,7 @@ class _BertMT(_BertBPR):
 
 class _DataMT(_DataModule):
     def __init__(self, rime_dataset, item_df, tokenizer, all_inputs, do_validation=None,
-                 batch_size=None, valid_batch_size=None, predict_batch_size=64 * torch.cuda.device_count(),
+                 batch_size=None, valid_batch_size=None, predict_batch_size=None,
                  **tokenizer_kw):
         super().__init__(rime_dataset, item_df.index, all_inputs, do_validation,
                          batch_size, valid_batch_size, predict_batch_size)
@@ -116,10 +116,12 @@ class BertMT(BertBPR):
     def __init__(self, item_df, batch_size=10,
                  model_name='distilbert-base-uncased', max_length=30,
                  max_epochs=10, max_steps=-1, do_validation=None,
-                 strategy='dp', query_item_position_in_user_history=0,
+                 strategy=None, query_item_position_in_user_history=0,
                  **_model_kw):
         if do_validation is None:
             do_validation = max_epochs > 1
+        if strategy is None:
+            strategy = 'dp' if torch.cuda.device_count() > 1 else None
 
         self.item_titles = item_df['TITLE']
         self.max_length = max_length
@@ -136,7 +138,7 @@ class BertMT(BertBPR):
 
         self.model = _BertMT(self.all_inputs, **self._model_kw)
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
-        self.predict_batch_size = 64 * torch.cuda.device_count()
+        self.predict_batch_size = 6 * self.batch_size
 
         self._ckpt_dirpath = []
         self._logger = TensorBoardLogger('logs', "BertMT")
@@ -197,7 +199,7 @@ def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, be
 
     bmt = BertMT(
         item_df, alpha=alpha, beta=beta,
-        max_epochs=50, batch_size=10 * torch.cuda.device_count(),
+        max_epochs=50, batch_size=10 * max(1, torch.cuda.device_count()),
         sample_with_prior=True, sample_with_posterior=0,
         replacement=False, n_negatives=5, valid_n_negatives=5,
         training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
