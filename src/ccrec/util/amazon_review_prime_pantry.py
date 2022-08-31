@@ -26,8 +26,9 @@ def get_item_df(meta_file='data/amazon_review_prime_pantry/meta_Prime_Pantry.jso
                 landingImageURL_file='data/amazon_review_prime_pantry/landingImageURL.csv.gz',
                 landingImageURL_folder='data/amazon_review_prime_pantry/landingImage',
                 shorten_brand_name=True,
-                return_tfidf_csr=True):
-    item_df = pd.read_json(meta_file, lines=True).drop_duplicates(subset=['asin'])
+                return_tfidf_csr=True,
+                nrows=None):
+    item_df = pd.read_json(meta_file, lines=True, nrows=nrows).drop_duplicates(subset=['asin'])
     item_df = item_df.set_index('asin').assign(
         TITLE=lambda df: df.apply(_join_title_description, axis=1),
         BRAND=lambda df: df.brand,

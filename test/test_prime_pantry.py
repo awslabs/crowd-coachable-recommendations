@@ -38,9 +38,7 @@ def test_prime_pantry_ccrec(
         epsilon='vae'
     """
 
-    item_df, tfidf_csr = get_item_df()
-    if nrows is not None:
-        item_df = item_df.head(nrows)
+    item_df, tfidf_csr = get_item_df(nrows)
     zero_shot = create_zero_shot(item_df)
     user_df = zero_shot.user_df
 
