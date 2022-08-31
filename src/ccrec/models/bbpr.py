@@ -233,7 +233,7 @@ class BertBPR:
         )
         self.model = _BertBPR(self.all_inputs, **self._model_kw)
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
-        self.predict_batch_size = 64 * torch.cuda.device_count()
+        self.predict_batch_size = 6 * self.batch_size
 
         self._ckpt_dirpath = []
         self._logger = TensorBoardLogger('logs', "BertBPR")

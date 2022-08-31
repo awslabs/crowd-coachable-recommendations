@@ -1,3 +1,5 @@
+data/amazon_review_prime_pantry/landingImage/
+data/amazon_review_prime_pantry/meta_Prime_Pantry.json.gz
 .idea
 sftp-config.json
 *~
