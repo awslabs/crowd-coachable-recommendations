@@ -1,4 +1,15 @@
 from setuptools import find_packages, setup
+import subprocess, re
+
+
+def get_cuda_version():
+    try:
+        output = subprocess.check_output(['nvcc', '--version'])
+        match = re.search(r"Build cuda_(\d+).(\d+)", output)
+        return match.group(1), match.group(2)
+    except FileNotFoundError:
+        return None
+
 
 setup(
     name="ccrec",
@@ -8,7 +19,9 @@ setup(
     install_requires=[
         "datasets >= 2.4.0",
         "shap >= 0.41.0",
+        "dgl" if get_cuda_version() is None else "dgl-cu{}{}".format(*get_cuda_version()),
         'recurrent-intensity-model-experiments @ git+https://github.com/awslabs/recurrent-intensity-model-experiments@main',
+        "pytest",
         "flaky",
     ],
 )

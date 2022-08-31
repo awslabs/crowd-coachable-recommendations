@@ -217,7 +217,7 @@ class BertBPR:
         if do_validation is None:
             do_validation = max_epochs > 1
         if strategy is None:
-            strategy = 'dp' if torch.cuda.device_count() > 1 else None,
+            strategy = 'dp' if torch.cuda.device_count() > 1 else None
 
         self.item_titles = item_df['TITLE']
         self._model_kw = {"freeze_bert": freeze_bert, "do_validation": do_validation, **kw}

@@ -121,7 +121,7 @@ class BertMT(BertBPR):
         if do_validation is None:
             do_validation = max_epochs > 1
         if strategy is None:
-            strategy = 'dp' if torch.cuda.device_count() > 1 else None,
+            strategy = 'dp' if torch.cuda.device_count() > 1 else None
 
         self.item_titles = item_df['TITLE']
         self.max_length = max_length

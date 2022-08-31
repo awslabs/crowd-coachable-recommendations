@@ -1,7 +1,0 @@
-name: rime_env
-channels:
-  - conda-forge
-  - dglteam
-dependencies:
-  - pytest
-  - dgl
