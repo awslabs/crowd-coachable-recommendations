@@ -75,7 +75,8 @@ class VAEData(LightningDataModule):
         return self._create_dataloader('predict')
 
 
-def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None):
+def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
+             user_df=None, convert_time_unit='s'):
     """
     item_df = get_item_df()[0]  # indexed by ITEM_ID
     gnd_response = pd.read_json(
@@ -99,14 +100,14 @@ def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None):
     varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
 
     # evaluation
-    zero_shot = create_zero_shot(item_df)
-    gnd_events = parse_response(gnd_response)
+    zero_shot = create_zero_shot(item_df, user_df=user_df)
+    gnd_events = parse_response(gnd_response, convert_time_unit=convert_time_unit)
     gnd = rime.dataset.Dataset(
         zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, gnd_events]),
+        test_requests=gnd_response.set_index('request_time', append=True)[[]],
         sample_with_prior=1e5)
-    gnd._k1 = 1
-    reranking_task = rime.Experiment(gnd)
-    reranking_task.run({'varCT': varCT})
-    recall = reranking_task.item_rec['varCT']['recall']  # expect 0.363
 
-    return recall, tower  # tower.model.save_pretrained(save_dir)
+    reranking_scores = varCT.transform(gnd) + gnd.prior_score
+    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+
+    return metrics, reranking_scores, tower  # tower.model.save_pretrained(save_dir)

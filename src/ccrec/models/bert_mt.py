@@ -180,7 +180,8 @@ class BertMT(BertBPR):
         return self
 
 
-def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, beta=0.0):
+def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, beta=0.0,
+             user_df=None, convert_time_unit='s'):
     """
     item_df = get_item_df()[0]
     expl_response = pd.read_json(
@@ -190,29 +191,29 @@ def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, be
         'prime-pantry-i2i-online-baseline4-response.json', lines=True, convert_dates=False
     ).set_index('level_0')
     """
-    zero_shot = create_zero_shot(item_df)
+    zero_shot = create_zero_shot(item_df, user_df=user_df)
     train_requests = expl_response.set_index('request_time', append=True)
-    expl_events = parse_response(expl_response)
+    expl_events = parse_response(expl_response, convert_time_unit=convert_time_unit)
     V = rime.dataset.Dataset(
         zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, expl_events]),
         test_requests=train_requests[[]], test_update_history=False, horizon=0.1, sample_with_prior=1)
+    assert V.target_csr.nnz > 0
 
     bmt = BertMT(
         item_df, alpha=alpha, beta=beta,
-        max_epochs=50, batch_size=10 * max(1, torch.cuda.device_count()),
+        max_epochs=max_epochs, batch_size=10 * max(1, torch.cuda.device_count()),
         sample_with_prior=True, sample_with_posterior=0,
         replacement=False, n_negatives=5, valid_n_negatives=5,
         training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
     )
     bmt.fit(V)
 
-    gnd_events = parse_response(gnd_response)
+    gnd_events = parse_response(gnd_response, convert_time_unit=convert_time_unit)
     gnd = rime.dataset.Dataset(
         zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, gnd_events]),
+        test_requests=gnd_response.set_index('request_time', append=True)[[]],
         sample_with_prior=1e5)
-    gnd._k1 = 1
-    reranking_task = rime.Experiment(gnd)
-    reranking_task.run({'bmt': bmt})
-    recall = reranking_task.item_rec['bmt']['recall']
+    reranking_scores = bmt.transform(gnd) + gnd.prior_score
+    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 
-    return recall, bmt
+    return metrics, reranking_scores, bmt

@@ -22,13 +22,14 @@ def _join_title_description(x):
     return ' '.join(text)
 
 
-def get_item_df(meta_file='data/amazon_review_prime_pantry/meta_Prime_Pantry.json.gz',
-                landingImageURL_file='data/amazon_review_prime_pantry/landingImageURL.csv.gz',
-                landingImageURL_folder='data/amazon_review_prime_pantry/landingImage',
+def get_item_df(data_root='data/amazon_review_prime_pantry',
+                meta_file='meta_Prime_Pantry.json.gz',
+                landingImageURL_file='landingImageURL.csv.gz',
+                landingImageURL_folder='landingImage',
                 shorten_brand_name=True,
                 return_tfidf_csr=True,
                 nrows=None):
-    item_df = pd.read_json(meta_file, lines=True, nrows=nrows).drop_duplicates(subset=['asin'])
+    item_df = pd.read_json(f'{data_root}/{meta_file}', lines=True, nrows=nrows).drop_duplicates(subset=['asin'])
     item_df = item_df.set_index('asin').assign(
         TITLE=lambda df: df.apply(_join_title_description, axis=1),
         BRAND=lambda df: df.brand,
@@ -39,11 +40,11 @@ def get_item_df(meta_file='data/amazon_review_prime_pantry/meta_Prime_Pantry.jso
     print(f'# items {len(item_df)}, # brands {item_df["BRAND"].nunique()}')
 
     item_df = item_df.join(
-        pd.read_csv(landingImageURL_file, names=['asin', 'landingImage']).set_index('asin')
+        pd.read_csv(f'{data_root}/{landingImageURL_file}', names=['asin', 'landingImage']).set_index('asin')
     )
     item_df = item_df[item_df['landingImage'].notnull()]
     item_df = item_df[item_df['landingImage'].apply(lambda x: x.endswith('.jpg'))]
-    item_df['landingImage'] = [f'{landingImageURL_folder}/{x}.jpg' for x in item_df.index.values]
+    item_df['landingImage'] = [f'{data_root}/{landingImageURL_folder}/{x}.jpg' for x in item_df.index.values]
 
     tfidf_fit = TfidfVectorizer().fit(item_df['TITLE'].tolist())
     tfidf_csr = tfidf_fit.transform(item_df['TITLE'].tolist())

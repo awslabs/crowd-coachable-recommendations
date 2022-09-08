@@ -6,16 +6,25 @@ from rime.dataset import Dataset
 from rime.util import indices2csr, perplexity, matrix_reindex
 
 
-def create_zero_shot(item_df, self_training=False):
-    user_df = pd.DataFrame({"TEST_START_TIME": [1] * len(item_df)})  # naturally indexed
-    event_df = pd.DataFrame({
-        'USER_ID': np.arange(len(item_df)),
-        'ITEM_ID': item_df.index.values,
-        'TIMESTAMP': 0,
-        'VALUE': 1,
-    })
-    if self_training:
-        event_df = pd.concat([event_df, event_df.assign(TIMESTAMP=1)], ignore_index=True)
+def create_zero_shot(item_df, self_training=False, user_df=None):
+    if user_df is None:
+        user_df = pd.DataFrame([{
+            "USER_ID": u,
+            "TEST_START_TIME": 1,
+            "_hist_items": [v],
+            "_hist_ts": [0],
+        } for u, v in enumerate(item_df.index.values)
+        ]).set_index("USER_ID")
+
+    event_df = user_df["_hist_items"].explode().to_frame("ITEM_ID")
+    event_df["TIMESTAMP"] = user_df["_hist_ts"].explode()
+    event_df = event_df.reset_index()  # ITEM_ID, TIMESTAMP, USER_ID
+
+    if self_training:  # legacy
+        target_df = user_df.set_index('TEST_START_TIME', append=True)['_hist_items'].explode().to_frame('ITEM_ID')
+        target_df['USER_ID'] = target_df.index.get_level_values(0)
+        target_df['TIMESTAMP'] = target_df.index.get_level_values(-1)
+        event_df = pd.concat([event_df, target_df], ignore_index=True)
     return Dataset(user_df, item_df, event_df)
 
 
@@ -225,7 +234,7 @@ def _expand_na_class(request):
                            _group=request['_group'].apply(lambda x: x + [-1]))
 
 
-def parse_response(response, step_idx=None, infer_time_unit=True):
+def parse_response(response, step_idx=None, convert_time_unit='s'):
     if step_idx is None:
         step_idx = response['request_time'].rank(method='dense').values - 1
     response = response.assign(step_idx=step_idx).set_index("step_idx", append=True)
@@ -234,10 +243,12 @@ def parse_response(response, step_idx=None, infer_time_unit=True):
     new_events['USER_ID'] = new_events.index.get_level_values(0)
     new_events['TIMESTAMP'] = response['request_time']  # reindex to explode
     new_events['VALUE'] = response['multi_label'].explode().values
-    new_events['_group'] = response['_group'].explode().values
     new_events['step_idx'] = new_events.index.get_level_values(-1)
 
-    if infer_time_unit and new_events['TIMESTAMP'].max() > time.time():
+    if '_group' in response:
+        new_events['_group'] = response['_group'].explode().values
+
+    while convert_time_unit == 's' and new_events['TIMESTAMP'].max() > 1e10:
         new_events['TIMESTAMP'] = new_events['TIMESTAMP'] / 1e3
     return new_events.reset_index(drop=True)
 
