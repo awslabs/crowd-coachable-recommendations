@@ -1,11 +1,4 @@
-import pandas as pd, numpy as np, torch
-from sklearn.feature_extraction.text import TfidfVectorizer
-import pytest, rime, ccrec, ccrec.models, ccrec.models.bbpr
-from ccrec import InteractiveExperiment, env
-from ccrec.env import create_zero_shot, Env, parse_response
-from ccrec.env.i2i_env import get_notebook_name
-from ccrec.models.vae_models import VAEPretrainedModel
-from ccrec.util.amazon_review_prime_pantry import get_item_df
+import pandas as pd
 from ccrec.models.vae_lightning import vae_main
 from ccrec.models.bert_mt import bmt_main
 
