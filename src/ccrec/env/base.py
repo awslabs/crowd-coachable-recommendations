@@ -248,7 +248,7 @@ def parse_response(response, step_idx=None, convert_time_unit='s'):
     if '_group' in response:
         new_events['_group'] = response['_group'].explode().values
 
-    while convert_time_unit == 's' and new_events['TIMESTAMP'].max() > 1e10:
+    while convert_time_unit == 's' and new_events['TIMESTAMP'].max() > time.time():
         new_events['TIMESTAMP'] = new_events['TIMESTAMP'] / 1e3
     return new_events.reset_index(drop=True)
 
