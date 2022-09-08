@@ -8,8 +8,8 @@ from ccrec.models.vae_models import VAEPretrainedModel
 from ccrec.util.amazon_review_prime_pantry import get_item_df
 
 
-def test_sample_data():
-    return get_item_df()
+def test_sample_data(data_root='data/amazon_review_prime_pantry'):
+    return get_item_df(data_root=data_root)
 
 
 @pytest.mark.parametrize("nrows", [10])
@@ -25,7 +25,8 @@ def test_prime_pantry_ccrec(
     s3_prefix=None,
     working_model=None,  # VAEPretrainedModel
     multi_label=False,
-    gnd_response_json='data/amazon_review_prime_pantry/prime_pantry_test_response.json.gz',
+    data_root='data/amazon_review_prime_pantry',
+    gnd_response_json='prime_pantry_test_response.json.gz',
     n_steps=1,
 ):
     """
@@ -39,12 +40,12 @@ def test_prime_pantry_ccrec(
         epsilon='vae'
     """
 
-    item_df, tfidf_csr = get_item_df(nrows=nrows)
+    item_df, tfidf_csr = get_item_df(nrows=nrows, data_root=data_root)
     zero_shot = create_zero_shot(item_df)
     user_df = zero_shot.user_df
 
     gnd_response = pd.read_json(
-        gnd_response_json, lines=True, convert_dates=False,
+        f'{data_root}/{gnd_response_json}', lines=True, convert_dates=False,
     ).rename({'level_0': 'USER_ID'}, axis=1).set_index(['USER_ID', 'TEST_START_TIME'])
     gnd_events = pd.concat([
         zero_shot.event_df,  # history features
