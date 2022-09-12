@@ -27,7 +27,7 @@ class EmbeddingModel(DistilBertPreTrainedModel):
 
         self.standard_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
 
-        self.loss_fct = nn.CrossEntropyLoss()
+        self.loss_fct = nn.CrossEntropyLoss(reduction='none')
 
     def generate_mean(self,hidden_states):
         raise NotImplementedError("return type: torch.Tensor")
@@ -114,7 +114,9 @@ class MaskedPretrainedModel(EmbeddingModel):
         return self.std
     
     def compute_output_loss(self, mu, std, prediction_logits, input_ids, labels):
-        return self.loss_fct(prediction_logits.view(-1, prediction_logits.size(-1)), labels.view(-1)) 
+        recon_loss = self.loss_fct(prediction_logits.swapaxes(1, 2), labels)
+        recon_loss = recon_loss.sum(1) / (labels != -100).sum(1).float()
+        return recon_loss
     
 
 class VAEPretrainedModel(EmbeddingModel):
@@ -150,7 +152,10 @@ class VAEPretrainedModel(EmbeddingModel):
     
     def compute_output_loss(self, mu, std, prediction_logits, input_ids, labels):
 
-        recon_loss = self.loss_fct(prediction_logits.view(-1, prediction_logits.size(-1)), input_ids.view(-1))
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + 2 * torch.log(std) - mu ** 2 - std ** 2, dim = 1), dim = 0)
+        if labels is None:
+            labels = torch.where(input_ids == 0, -100, input_ids)
+        recon_loss = self.loss_fct(prediction_logits.swapaxes(1, 2), labels)
+        recon_loss = recon_loss.sum(1) / (labels != -100).sum(1).float()
+        kld_loss = -0.5 * torch.sum(1 + 2 * torch.log(std) - mu ** 2 - std ** 2, dim=1)
 
         return recon_loss + self.vae_beta * kld_loss

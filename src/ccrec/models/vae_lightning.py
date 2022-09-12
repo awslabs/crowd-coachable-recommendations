@@ -24,7 +24,7 @@ class VAETower(_LitValidated):
             print(self.logger.log_dir)
 
     def training_and_validation_step(self, batch, batch_idx):
-        return self.model(**batch, return_dict=True)[0]
+        return self.model(**batch, return_dict=True)[0].mean()
 
     def forward(self, batch):
         return self.model(**batch, return_embedding=True)
