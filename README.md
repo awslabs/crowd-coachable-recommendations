@@ -6,8 +6,9 @@ Codes for zero-shot recommendations and subsequent online learning and explorati
 
 ## Getting Started
 
-* Please first install https://github.com/awslabs/recurrent-intensity-model-experiments following its README page.
-* Then run `pip install -e .` for the ccrec package.
+* Run `pip install -e .` for the ccrec package. This should also install part of the `recurrent-intensity-model-experiments` package as a dependency.
+* If you encounter a `numba` error, please run this: `pip install --no-cache-dir --ignore-installed -U numba`
+* To test: `from ccrec.util.demo_data import DemoData; DemoData().run_shap()`
 
 ## Contributing
 
