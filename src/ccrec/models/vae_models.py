@@ -6,7 +6,7 @@ from transformers import DistilBertPreTrainedModel, DistilBertModel
 from transformers.activations import get_activation
 from transformers.modeling_outputs import MaskedLMOutput
 
-import torch
+import torch, os
 from torch import nn
 from torch.nn import CrossEntropyLoss
 import copy
@@ -114,10 +114,10 @@ class MaskedPretrainedModel(EmbeddingModel):
         return self.std
     
     def compute_output_loss(self, mu, std, prediction_logits, input_ids, labels):
+        label_density = (labels != -100).sum(1).mean()
         recon_loss = self.loss_fct(prediction_logits.swapaxes(1, 2), labels)
-        recon_loss = recon_loss.sum(1) / (labels != -100).sum(1).float()
-        return recon_loss
-    
+        return recon_loss.sum(1) / label_density
+
 
 class VAEPretrainedModel(EmbeddingModel):
     def __init__(self, config: PretrainedConfig):
@@ -153,9 +153,12 @@ class VAEPretrainedModel(EmbeddingModel):
     def compute_output_loss(self, mu, std, prediction_logits, input_ids, labels):
 
         if labels is None:
-            labels = torch.where(input_ids == 0, -100, input_ids)
-        recon_loss = self.loss_fct(prediction_logits.swapaxes(1, 2), labels)
-        recon_loss = recon_loss.sum(1) / (labels != -100).sum(1).float()
+            labels = input_ids if int(os.environ.get('CCREC_LEGACY_VAE_BUG', 0)) else \
+                     torch.where(input_ids == 0, -100, input_ids)
+        label_density = (labels != -100).sum(1).mean()
+        recon_loss = self.loss_fcn(prediction_logits.swapaxes(1, 2), labels)
+        recon_loss = recon_loss.sum(1) / label_density
+
         kld_loss = -0.5 * torch.sum(1 + 2 * torch.log(std) - mu ** 2 - std ** 2, dim=1)
 
         return recon_loss + self.vae_beta * kld_loss
