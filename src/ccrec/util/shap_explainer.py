@@ -68,7 +68,7 @@ def plot_shap_values(x, y, shap_values, **kw):
     rainbow_text(x, y, ls, lc, **kw)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(unsafe_hash=True)
 class I2IExplainer:
     item_tower: typing.Callable  # cuda, eval
     tokenizer: typing.Any
