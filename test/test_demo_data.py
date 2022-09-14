@@ -4,7 +4,7 @@ from ccrec.util.demo_data import DemoData
 
 @pytest.fixture
 def demo_data_obj():
-    return DemoData(mock_image=True)
+    return DemoData()
 
 
 def test_vae_main(demo_data_obj):

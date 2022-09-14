@@ -81,7 +81,7 @@ class DemoData:
         return np.vstack(item_emb)
 
     def retrieve_similar(self, item_id, explainer, topk=4):
-        # TODO: mask subset of candidates
+        # TODO: filter items by different brands
         item_emb = self.create_embedding(explainer)
         query_ptr = self.item_df.index.get_indexer([item_id])
         query_emb = item_emb[query_ptr]
