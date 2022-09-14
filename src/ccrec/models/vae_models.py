@@ -114,7 +114,7 @@ class MaskedPretrainedModel(EmbeddingModel):
         return self.std
     
     def compute_output_loss(self, mu, std, prediction_logits, input_ids, labels):
-        label_density = (labels != -100).sum(1).mean()
+        label_density = (labels != -100).sum(1).float().mean()
         recon_loss = self.loss_fct(prediction_logits.swapaxes(1, 2), labels)
         return recon_loss.sum(1) / label_density
 
@@ -155,8 +155,8 @@ class VAEPretrainedModel(EmbeddingModel):
         if labels is None:
             labels = input_ids if int(os.environ.get('CCREC_LEGACY_VAE_BUG', 0)) else \
                      torch.where(input_ids == 0, -100, input_ids)
-        label_density = (labels != -100).sum(1).mean()
-        recon_loss = self.loss_fcn(prediction_logits.swapaxes(1, 2), labels)
+        label_density = (labels != -100).sum(1).float().mean()
+        recon_loss = self.loss_fct(prediction_logits.swapaxes(1, 2), labels)
         recon_loss = recon_loss.sum(1) / label_density
 
         kld_loss = -0.5 * torch.sum(1 + 2 * torch.log(std) - mu ** 2 - std ** 2, dim=1)
