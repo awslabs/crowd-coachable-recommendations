@@ -13,6 +13,8 @@ from ccrec.env import create_zero_shot, parse_response
 
 
 class _TowerMT(_Tower):
+    IS_AUTO_ENCODER = True
+
     def __init__(self, model, layer_norm='inferred from model'):
         super().__init__(model, torch.nn.Sequential(
             model.vocab_transform,

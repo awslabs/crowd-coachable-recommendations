@@ -5,6 +5,7 @@ from rime.util import indices2csr, auto_tensor, timed, auto_device
 from ccrec.env.base import Env, _expand_na_class
 from ccrec.util.shap_explainer import I2IExplainer, plot_shap_values
 import multiprocessing, functools
+from urllib.request import urlopen
 try:
     import boto3
     s3 = boto3.client('s3')
@@ -239,6 +240,19 @@ def download_labels(exp_info, request=None, verbose=True):
     return _expand_na_class(request).assign(multi_label=multi_label.tolist())
 
 
+def _show_image(url_or_path, ax=plt):
+    try:
+        if url_or_path.startswith('http'):
+            with urlopen(url_or_path) as downloaded:
+                with Image.open(downloaded) as image:
+                    ax.imshow(image)
+        else:
+            with Image.open(url_or_path) as image:
+                ax.imshow(image)
+    except Exception as e:
+        warnings.warn(f"Image {url_or_path} not shown due to {e}")
+
+
 @dataclasses.dataclass
 class I2IImageEnv(I2IEnv):
     explainer: typing.Callable = None
@@ -252,8 +266,9 @@ class I2IImageEnv(I2IEnv):
         from attrdict import AttrDict
         from PIL import Image
         Image.open(I2IImageEnv.image_format(
-            self=AttrDict(item_df=pd.DataFrame(columns=['landingImage'], index=item_id)),
-            x={'_hist_items': [..., item_id], 'cand_items': [item_id, item_id, ...]}
+            self=AttrDict(item_df=pd.DataFrame(columns=['landingImage'], index=<item_id_list>),
+                          explainer=<optional>),
+            x={'_hist_items': [item_id], 'cand_items': [item_id, item_id]},
         )).show()
         """
         plt.ioff()
@@ -266,13 +281,13 @@ class I2IImageEnv(I2IEnv):
         cand_images = [self.item_df.loc[candidate]['landingImage'] for candidate in x['cand_items']]
 
         if hasattr(self, "explainer") and self.explainer is not None:
-            cand_texts, (given_text,) = self.explainer([given_text], cand_texts), self.explainer(cand_texts, [given_text])
+            (given_text,), cand_texts = self.explainer([given_text]), self.explainer([given_text], cand_texts)
 
         ax = fig.add_subplot(3, 5, 1, frameon=False, xticks=[], yticks=[])
         ax.text(0.5, 0.5, 'Given', ha='center', va='center', fontsize=20)
 
         ax = fig.add_subplot(3, 5, 2, frameon=False, xticks=[], yticks=[])
-        ax.imshow(Image.open(given_image))
+        _show_image(given_image, ax)
 
         ax = fig.add_subplot(3, 5, (3, 5), frameon=False, xticks=[], yticks=[])
         if isinstance(given_text, shap._explanation.Explanation):
@@ -288,7 +303,7 @@ class I2IImageEnv(I2IEnv):
         for i, (image, text) in enumerate(zip(cand_images, cand_texts)):
             if isinstance(image, str):  # notnull
                 ax = fig.add_subplot(3, ncols, ncols + 1 + i, frameon=False, xticks=[], yticks=[])
-                ax.imshow(Image.open(image))
+                _show_image(image, ax)
 
             ax = fig.add_subplot(3, ncols, ncols * 2 + 1 + i, frameon=False, xticks=[], yticks=[])
             if isinstance(text, shap._explanation.Explanation):

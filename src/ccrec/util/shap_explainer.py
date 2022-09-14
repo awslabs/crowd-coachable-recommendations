@@ -1,7 +1,7 @@
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt, numpy as np
 from matplotlib import transforms
 import dataclasses, typing, torch
-import shap
+import shap, functools
 from shap.plots._text import unpack_shap_explanation_contents, process_shap_values, colors
 
 
@@ -68,28 +68,41 @@ def plot_shap_values(x, y, shap_values, **kw):
     rainbow_text(x, y, ls, lc, **kw)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(unsafe_hash=True)
 class I2IExplainer:
     item_tower: typing.Callable  # cuda, eval
     tokenizer: typing.Any
     fixed_context: int = 0  # 0 yields sparser results
     max_length: int = 128
+    independent_explainations: bool = False
 
     @property
     def tokenizer_kw(self):
         return dict(padding=True, return_tensors='pt', max_length=self.max_length, truncation=True)
 
+    def _get_unitary_utility(self, texts):
+        if hasattr(self.item_tower, 'IS_AUTO_ENCODER') and self.item_tower.IS_AUTO_ENCODER:
+            _inputs = self.tokenizer(texts.tolist(), **self.tokenizer_kw)
+            loss = self.item_tower(**_inputs, output_step='dict')[0].cpu().numpy()
+            return -loss.ravel()
+        return np.ravel(1)
+
+    def _get_pairwise_utility(self, x, cand_texts):
+        _inputs = self.tokenizer(cand_texts.tolist(), **self.tokenizer_kw)
+        y = self.item_tower(**_inputs)
+        return (x * y).sum(-1).cpu().numpy()
+
     @torch.no_grad()
-    def __call__(self, given, cand_texts):
-        _inputs = self.tokenizer(given, **self.tokenizer_kw)
-        x = self.item_tower(**_inputs)
-        x = x.mean(0, keepdims=True)
-
-        @torch.no_grad()
-        def f(cand_texts):
-            _inputs = self.tokenizer(cand_texts.tolist(), **self.tokenizer_kw)
-            y = self.item_tower(**_inputs)
-            return (x * y).sum(-1).cpu().numpy()
-
-        explainer = shap.Explainer(f, self.tokenizer)
-        return explainer(cand_texts, fixed_context=self.fixed_context)
+    def __call__(self, given, cand_texts=None):
+        if cand_texts is None:
+            explainer = shap.Explainer(self._get_unitary_utility, self.tokenizer)
+            return explainer(given, fixed_context=self.fixed_context)
+        elif self.independent_explainations:
+            explainer = shap.Explainer(self._get_unitary_utility, self.tokenizer)
+            return explainer(cand_texts, fixed_context=self.fixed_context)
+        else:  # conditional explanations
+            _inputs = self.tokenizer(given, **self.tokenizer_kw)
+            x = self.item_tower(**_inputs)
+            f = functools.partial(self._get_pairwise_utility, x)
+            explainer = shap.Explainer(f, self.tokenizer)
+            return explainer(cand_texts, fixed_context=self.fixed_context)

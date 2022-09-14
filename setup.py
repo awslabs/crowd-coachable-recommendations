@@ -4,7 +4,7 @@ import subprocess, re
 
 def get_cuda_version():
     try:
-        output = subprocess.check_output(['nvcc', '--version'])
+        output = subprocess.check_output(['nvcc', '--version']).decode()
         match = re.search(r"Build cuda_(\d+).(\d+)", output)
         return match.group(1), match.group(2)
     except FileNotFoundError:
