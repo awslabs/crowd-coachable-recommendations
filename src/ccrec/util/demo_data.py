@@ -1,8 +1,11 @@
 import pandas as pd, numpy as np, torch
 import pytest, dataclasses, functools
+import scipy.sparse as sps
+from rime.util import auto_cast_lazy_score
 from ccrec.models.vae_lightning import vae_main
 from ccrec.models.bert_mt import bmt_main
 from attrdict import AttrDict
+from ccrec.util import auto_device
 from ccrec.env.i2i_env import Image, I2IImageEnv
 
 
@@ -80,15 +83,24 @@ class DemoData:
         ]
         return np.vstack(item_emb)
 
-    def retrieve_similar(self, item_id, explainer, topk=4):
-        # TODO: filter items by different brands
-        item_emb = self.create_embedding(explainer)
-        query_ptr = self.item_df.index.get_indexer([item_id])
-        query_emb = item_emb[query_ptr]
-        item_scores = item_emb @ query_emb.ravel()
-        item_scores[query_ptr] = float('-inf')
-        cand_ptr = np.argsort(-item_scores)[:topk]
-        return self.item_df.index[cand_ptr]
+    def retrieve_similar(self, item_id, explainer, prior_score=None, topk=4):
+        """ output batch_size * topk from a list of item_ids, a model explainer, and a prior_score matrix """
+        item_id = np.ravel(item_id)  # convert to a list if not already
+        batch_size = len(item_id)
+
+        item_emb = self.create_embedding(explainer)  # vocab_size * nhid
+        query_ptr = self.item_df.index.get_indexer(item_id)
+        query_emb = item_emb[query_ptr]  # batch_size * nhid
+        item_scores = auto_cast_lazy_score(query_emb) @ item_emb.T  # batch_size * vocab_size
+
+        if prior_score is None:  # exclude query item in the retrieved set
+            prior_score = sps.csr_matrix(
+                (np.ones(batch_size) * -1e10, query_ptr, np.arange(batch_size + 1)),
+                shape=(batch_size, len(self.item_df)))
+        item_scores = item_scores + prior_score  # batch_size * vocab_size
+
+        cand_ptr = item_scores.as_tensor(auto_device()).topk(topk).indices.cpu().numpy()
+        return self.item_df.index[cand_ptr]  # bach_size * topk
 
     def run_shap(self, item_id=None, cand_items=None, model_main='run_bmt_main'):
         *_, bmt = getattr(self, model_main)()
@@ -97,7 +109,7 @@ class DemoData:
         if item_id is None:
             item_id = self.item_df.index.values[0]
         if cand_items is None:
-            cand_items = self.retrieve_similar(item_id, explainer)
+            cand_items = self.retrieve_similar(item_id, explainer).ravel()  # a list of topk items
 
         image = I2IImageEnv.image_format(
             self=AttrDict(item_df=self.item_df, explainer=explainer),
