@@ -1,11 +1,10 @@
 import pandas as pd, numpy as np, torch
 import pytest, dataclasses, functools
 import scipy.sparse as sps
-from rime.util import auto_cast_lazy_score
+from rime.util import auto_cast_lazy_score, auto_device
 from ccrec.models.vae_lightning import vae_main
 from ccrec.models.bert_mt import bmt_main
 from attrdict import AttrDict
-from ccrec.util import auto_device
 from ccrec.env.i2i_env import Image, I2IImageEnv
 
 
