@@ -28,6 +28,7 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         self.standard_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
 
         self.loss_fct = nn.CrossEntropyLoss(reduction='none')
+        self.cls_to_embedding
 
     def generate_mean(self,hidden_states):
         raise NotImplementedError("return type: torch.Tensor")
@@ -47,6 +48,7 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_cls: Optional[bool] = False,
         return_mean_std: Optional[bool] = False,
         return_embedding: Optional[bool] = False,
         return_dict: Optional[bool] = None
@@ -66,6 +68,9 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         
         seq_length = dlbrt_output[0].size(dim = 1)
         hidden_states = dlbrt_output[0][:,0,:]  # (bs, dim)
+
+        if return_cls:
+            return hidden_states
 
         mu = self.generate_mean(hidden_states)
         std = self.generate_std(hidden_states)
@@ -100,6 +105,18 @@ class EmbeddingModel(DistilBertPreTrainedModel):
             hidden_states=dlbrt_output.hidden_states,
             attentions=dlbrt_output.attentions,
         )
+
+    def cls_to_embedding(self, hidden_states):
+        mu = self.generate_mean(hidden_states)
+        std = self.generate_std(hidden_states)
+
+        eps = torch.randn_like(mu)
+        hidden_states = eps * std + mu
+
+        hidden_states = self.vocab_transform(hidden_states)  # (bs, dim)
+        hidden_states = self.activation(hidden_states)  # (bs, dim)
+
+        return self.standard_layer_norm(hidden_states)
 
 
 class MaskedPretrainedModel(EmbeddingModel):

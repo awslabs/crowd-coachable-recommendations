@@ -3,41 +3,42 @@ from torch.utils.data import DataLoader
 from datasets import Dataset, DatasetDict
 from transformers import AutoTokenizer
 from pytorch_lightning import LightningDataModule, Trainer
-from ccrec.models.vae_models import MaskedPretrainedModel, VAEPretrainedModel
+from ccrec.models import vae_models
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 import rime
 from rime.util import _LitValidated
 from rime.models.zero_shot import ItemKNN
 from ccrec.env import create_zero_shot, parse_response
+from ccrec.models.item_tower import VAEItemTower
 
 
-class VAETower(_LitValidated):
-    def __init__(self, beta=0, model_name='distilbert-base-uncased', tokenizer='required for explainer'):
+class LitVAEModel(_LitValidated):
+    def __init__(self, beta=0, model_name='distilbert-base-uncased',
+                 model_cls_name='VAEPretrainedModel', tokenizer=None, tokenizer_kw={}):
         super().__init__()
         self.save_hyperparameters("beta", "model_name")
-        self.model = VAEPretrainedModel.from_pretrained(model_name)
-        self.tokenizer = tokenizer
-        if hasattr(self.model, 'set_beta'):
-            self.model.set_beta(beta)
+        model = getattr(vae_models, model_cls_name).from_pretrained(model_name)
+        tokenizer = tokenizer
+        if hasattr(model, 'set_beta'):
+            model.set_beta(beta)
+        self.model = VAEItemTower(model, tokenizer=tokenizer, tokenizer_kw=tokenizer_kw)
 
     def setup(self, stage):
         if stage == 'fit':
             print(self.logger.log_dir)
 
     def training_and_validation_step(self, batch, batch_idx):
-        return self.model(**batch, return_dict=True)[0].mean()
+        return self.model(**batch, output_step='dict')[0].mean()
 
     def forward(self, batch):
-        return self.model(**batch, return_embedding=True)
+        return self.model(**batch, output_step='embedding')
 
     def configure_optimizers(self):
         return torch.optim.AdamW(
             self.parameters(), lr=2e-5, weight_decay=0.01)
 
-    def to_explainer(self):
-        from ccrec.models.bert_mt import _TowerMT
-        from ccrec.util.shap_explainer import I2IExplainer
-        return I2IExplainer(_TowerMT(self.model), self.tokenizer)
+    def to_explainer(self, **kw):
+        return self.model.to_explainer(**kw)
 
 
 class VAEData(LightningDataModule):
@@ -93,7 +94,7 @@ def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
         train_df = item_df
 
     tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
-    tower = VAETower(beta, tokenizer=tokenizer)
+    tower = LitVAEModel(beta, tokenizer=tokenizer)
     train_dm = VAEData(train_df, tokenizer, 64 * max(1, torch.cuda.device_count()))
     trainer = Trainer(max_epochs=max_epochs, gpus=torch.cuda.device_count(),
                       strategy='dp' if torch.cuda.device_count() else None,

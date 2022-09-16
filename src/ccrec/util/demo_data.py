@@ -2,8 +2,6 @@ import pandas as pd, numpy as np, torch
 import pytest, dataclasses, functools
 import scipy.sparse as sps
 from rime.util import auto_cast_lazy_score, auto_device
-from ccrec.models.vae_lightning import vae_main
-from ccrec.models.bert_mt import bmt_main
 from attrdict import AttrDict
 from ccrec.env.i2i_env import Image, I2IImageEnv
 
@@ -62,12 +60,20 @@ class DemoData:
 
     @functools.lru_cache()
     def run_vae_main(self):
+        from ccrec.models.vae_lightning import vae_main
         return vae_main(self.item_df, self.gnd_response, max_epochs=self.max_epochs, user_df=self.user_df)
 
     @functools.lru_cache()
     def run_bmt_main(self):
+        from ccrec.models.bert_mt import bmt_main
         return bmt_main(self.item_df, self.expl_response, self.gnd_response,
                         max_epochs=self.max_epochs, user_df=self.user_df, convert_time_unit=self.convert_time_unit)
+
+    @functools.lru_cache()
+    def run_bbpr_main(self):
+        from ccrec.models.bbpr import bbpr_main
+        return bbpr_main(self.item_df, self.expl_response, self.gnd_response,
+                         max_epochs=self.max_epochs, user_df=self.user_df, convert_time_unit=self.convert_time_unit)
 
     @torch.no_grad()
     def create_embedding(self, explainer):

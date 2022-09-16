@@ -1,41 +1,16 @@
 import numpy as np, torch, torch.nn.functional as F, tqdm, os, pandas as pd
 from pytorch_lightning.trainer.supporters import CombinedLoader
 from ccrec.models.bbpr import (
-    _Tower, _BertBPR, sps_to_torch, _device_mode_context, auto_device, BertBPR,
+    _BertBPR, sps_to_torch, _device_mode_context, auto_device, BertBPR,
     AutoTokenizer, TensorBoardLogger, empty_cache_on_exit, _DataModule, Trainer,
     LightningDataModule, DataLoader, auto_cast_lazy_score, I2IExplainer,
     default_random_split, _LitValidated)
-from ccrec.models.vae_models import MaskedPretrainedModel, VAEPretrainedModel
+from ccrec.models import vae_models
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 from ccrec.models.vae_lightning import VAEData
 import rime
 from ccrec.env import create_zero_shot, parse_response
-
-
-class _TowerMT(_Tower):
-    IS_AUTO_ENCODER = True
-
-    def __init__(self, model, layer_norm='inferred from model'):
-        super().__init__(model, torch.nn.Sequential(
-            model.vocab_transform,
-            model.activation,
-            model.standard_layer_norm))
-
-    def forward(self, cls=None, input_step='inputs', output_step='final', **inputs):
-        if input_step == 'inputs':
-            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-            if output_step == 'cls':
-                mean, std = self.model(**inputs, return_mean_std=True)
-                assert std == 0, "calling cls on vae model is ambiguous"
-                return mean
-            if output_step == 'final':
-                return self.model(**inputs, return_embedding=True)  # standard_layer_norm
-            elif output_step == 'dict':
-                return self.model(**inputs, return_dict=True)  # ct loss and logits
-
-        elif input_step == 'cls':
-            if output_step == 'final':
-                return self.layer_norm(cls)
+from ccrec.models.item_tower import VAEItemTower
 
 
 class _BertMT(_BertBPR):
@@ -46,6 +21,7 @@ class _BertMT(_BertBPR):
                  replacement=True,
                  sample_with_prior=True, sample_with_posterior=0.5,
                  pretrained_checkpoint=None,
+                 model_cls_name='VAEPretrainedModel', tokenizer=None, tokenizer_kw={},
                  ):
         super(_BertBPR, self).__init__()
         if valid_n_negatives is None:
@@ -61,10 +37,10 @@ class _BertMT(_BertBPR):
 
         if pretrained_checkpoint is None:
             pretrained_checkpoint = model_name
-        vae_model = VAEPretrainedModel.from_pretrained(pretrained_checkpoint)
+        vae_model = getattr(vae_models, model_cls_name).from_pretrained(pretrained_checkpoint)
         if hasattr(vae_model, 'set_beta'):
             vae_model.set_beta(beta)
-        self.item_tower = _TowerMT(vae_model)
+        self.item_tower = VAEItemTower(vae_model, tokenizer=tokenizer, tokenizer_kw=tokenizer_kw)
 
         self.all_inputs = all_inputs
         self.alpha = alpha
@@ -84,6 +60,9 @@ class _BertMT(_BertBPR):
     def configure_optimizers(self):
         return torch.optim.AdamW(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+
+    def to_explainer(self, **kw):
+        return self.item_tower.to_explainer(**kw)
 
 
 class _DataMT(_DataModule):
@@ -116,7 +95,7 @@ class _DataMT(_DataModule):
 
 class BertMT(BertBPR):
     def __init__(self, item_df, batch_size=10,
-                 model_name='distilbert-base-uncased', max_length=30,
+                 model_cls_name='VAEPretrainedModel', model_name='distilbert-base-uncased', max_length=30,
                  max_epochs=10, max_steps=-1, do_validation=None,
                  strategy=None, query_item_position_in_user_history=0,
                  **_model_kw):
@@ -132,11 +111,13 @@ class BertMT(BertBPR):
         self.max_epochs = max_epochs
         self.max_steps = max_steps
         self.strategy = strategy
-        self._model_kw = {**_model_kw, 'model_name': model_name}
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer_kw = dict(padding='max_length', max_length=self.max_length, truncation=True)
         self.all_inputs = self.tokenizer(self.item_titles.tolist(), return_tensors='pt', **self.tokenizer_kw)
+
+        self._model_kw = {**_model_kw, 'model_name': model_name, 'model_cls_name': model_cls_name,
+                          'tokenizer': self.tokenizer, 'tokenizer_kw': self.tokenizer_kw}
 
         self.model = _BertMT(self.all_inputs, **self._model_kw)
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
