@@ -4,8 +4,8 @@ from rime.util import auto_device
 
 
 class ItemTowerBase(torch.nn.Module):
-    """ support texts -> inputs -> cls -> embedding / loss;
-    tokenizer is required for texts_to_inputs, to_map_fn and to_explainer for e2e inference """
+    """ support text -> inputs -> cls -> embedding / loss;
+    tokenizer is required for text_to_inputs, to_map_fn and to_explainer for e2e inference """
     def __init__(self, *module_list, tokenizer=None, tokenizer_kw={}):
         super().__init__()
         self.module_list = module_list
@@ -17,14 +17,15 @@ class ItemTowerBase(torch.nn.Module):
     def device(self):
         return self.module_list[0].device
 
-    def texts_to_inputs(self, texts):
-        return self.tokenizer(texts, **self.tokenizer_kw)
+    def text_to_inputs(self, text):
+        return self.tokenizer(text, **self.tokenizer_kw)
 
-    def forward(self, cls=None, texts=None, input_step='inputs', output_step='embedding', **inputs):
+    def forward(self, cls=None, text=None, input_step='inputs', output_step='embedding', **inputs):
         raise NotImplementedError(f"{self.__class__.__name__} does not support {input_step}->{output_step} forward")
 
     def to_map_fn(self, input_step, output_step):
-        return functools.partial(self.forward, input_step=input_step, output_step=output_step)
+        assert self.tokenizer is not None or input_step != 'text', 'map_fn with text input requires tokenizer attribute'
+        return lambda data: {output_step: self(**data, input_step=input_step, output_step=output_step).cpu().numpy()}
 
     def to_explainer(self, **kw):
         from ccrec.util.shap_explainer import I2IExplainer
@@ -40,9 +41,9 @@ class NaiveItemTower(ItemTowerBase):
         self.cls_model = cls_model
         self.standard_layer_norm = standard_layer_norm
 
-    def forward(self, cls=None, texts=None, input_step='inputs', output_step='embedding', **inputs):
-        if input_step == 'texts':
-            inputs = self.texts_to_inputs(texts=texts)
+    def forward(self, cls=None, text=None, input_step='inputs', output_step='embedding', **inputs):
+        if input_step == 'text':
+            inputs = self.text_to_inputs(text=text)
             input_step = 'inputs'
 
         if input_step == 'inputs':
@@ -65,9 +66,9 @@ class VAEItemTower(ItemTowerBase):
         self.ae_model = ae_model
         self.cls_to_embedding = ae_model.cls_to_embedding
 
-    def forward(self, cls=None, texts=None, input_step='inputs', output_step='embedding', **inputs):
-        if input_step == 'texts':
-            inputs = self.texts_to_inputs(texts=texts)
+    def forward(self, cls=None, text=None, input_step='inputs', output_step='embedding', **inputs):
+        if input_step == 'text':
+            inputs = self.text_to_inputs(text=text)
             input_step = 'inputs'
 
         if input_step == 'inputs':

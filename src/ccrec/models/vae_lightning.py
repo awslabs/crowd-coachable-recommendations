@@ -7,6 +7,7 @@ from ccrec.models import vae_models
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 import rime
 from rime.util import _LitValidated
+from ccrec.util import _device_mode_context
 from rime.models.zero_shot import ItemKNN
 from ccrec.env import create_zero_shot, parse_response
 from ccrec.models.item_tower import VAEItemTower
@@ -54,8 +55,8 @@ class VAEData(LightningDataModule):
         self._num_batches = len(item_df) / self._batch_size
 
     def setup(self, stage):
-        _to_dataset = lambda x: Dataset.from_pandas(x.reset_index()[['TITLE']])
         if stage == 'fit':
+            _to_dataset = lambda x: Dataset.from_pandas(x.reset_index()[['TITLE']])
             if self._do_validation and len(self._item_df) >= 5:
                 shuffled = self._item_df.sample(frac=1, random_state=1)
                 self._ds = DatasetDict(
@@ -63,23 +64,17 @@ class VAEData(LightningDataModule):
                     valid=_to_dataset(shuffled.iloc[len(self._item_df) * 4 // 5:]))
             else:
                 self._ds = DatasetDict(train=_to_dataset(self._item_df))
-        else:  # predict
-            self._ds = DatasetDict(predict=_to_dataset(self._item_df))
-        self._ds = self._ds.map(self._tokenizer_fn, remove_columns=['TITLE'])
-
-    def _create_dataloader(self, split, shuffle=False):
-        if split in self._ds:
-            return DataLoader(self._ds[split], batch_size=self._batch_size,
-                              collate_fn=self._collate_fn, shuffle=shuffle)
+            self._ds = self._ds.map(self._tokenizer_fn, remove_columns=['TITLE'])
 
     def train_dataloader(self):
-        return self._create_dataloader('train', True)
+        if 'train' in self._ds:
+            return DataLoader(self._ds['train'], batch_size=self._batch_size,
+                              collate_fn=self._collate_fn, shuffle=True)
 
     def val_dataloader(self):
-        return self._create_dataloader('valid')
-
-    def predict_dataloader(self):
-        return self._create_dataloader('predict')
+        if 'valid' in self._ds:
+            return DataLoader(self._ds['valid'], batch_size=self._batch_size,
+                              collate_fn=self._collate_fn)
 
 
 def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
@@ -101,9 +96,10 @@ def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
                       log_every_n_steps=1)
     trainer.fit(tower, datamodule=train_dm)
 
-    test_dm = VAEData(item_df, tokenizer, 64 * max(1, torch.cuda.device_count()))
-    item_emb = trainer.predict(tower, datamodule=test_dm)
-    item_emb = torch.cat(item_emb)
+    ds = Dataset.from_pandas(item_df.rename({'TITLE': 'text'}, axis=1))
+    with _device_mode_context(tower.model) as model, torch.no_grad():
+        ds = ds.map(model.to_map_fn('text', 'embedding'), batch_size=64)
+    item_emb = np.vstack(ds['embedding'])
     varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
 
     # evaluation

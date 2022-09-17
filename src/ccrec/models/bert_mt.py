@@ -67,11 +67,10 @@ class _BertMT(_BertBPR):
 
 class _DataMT(_DataModule):
     def __init__(self, rime_dataset, item_df, tokenizer, all_inputs, do_validation=None,
-                 batch_size=None, valid_batch_size=None, predict_batch_size=None,
-                 **tokenizer_kw):
+                 batch_size=None, valid_batch_size=None, vae_batch_size=None, **tokenizer_kw):
         super().__init__(rime_dataset, item_df.index, all_inputs, do_validation,
-                         batch_size, valid_batch_size, predict_batch_size)
-        self._ct = VAEData(item_df, tokenizer, predict_batch_size, do_validation, **tokenizer_kw)
+                         batch_size, valid_batch_size)
+        self._ct = VAEData(item_df, tokenizer, vae_batch_size, do_validation, **tokenizer_kw)
         self.training_data.update({
             'ct_cycles': max(1, self._num_batches / self._ct._num_batches),
             'ft_cycles': max(1, self._ct._num_batches / self._num_batches),
@@ -121,7 +120,7 @@ class BertMT(BertBPR):
 
         self.model = _BertMT(self.all_inputs, **self._model_kw)
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
-        self.predict_batch_size = 6 * self.batch_size
+        self.vae_batch_size = 6 * self.batch_size
 
         self._ckpt_dirpath = []
         self._logger = TensorBoardLogger('logs', "BertMT")
@@ -132,7 +131,7 @@ class BertMT(BertBPR):
 
     def _get_data_module(self, V):
         return _DataMT(V, self.item_titles.to_frame(), self.tokenizer, self.all_inputs, self.do_validation,
-                       self.batch_size, self.valid_batch_size, self.predict_batch_size)
+                       self.batch_size, self.valid_batch_size, self.vae_batch_size)
 
     @empty_cache_on_exit
     def fit(self, V=None):

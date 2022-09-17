@@ -1,9 +1,11 @@
 import pandas as pd, numpy as np, torch
 import pytest, dataclasses, functools
+from datasets import Dataset
 import scipy.sparse as sps
 from rime.util import auto_cast_lazy_score, auto_device
 from attrdict import AttrDict
 from ccrec.env.i2i_env import Image, I2IImageEnv
+from ccrec.util import _device_mode_context
 
 
 def _pandas_read(file_name, **kw):
@@ -32,14 +34,11 @@ class DemoData:
         gnd_response='test_response.json',
         max_epochs=1,
         convert_time_unit=None,
-        cache_embedding=False,
     ):
         for k, v in locals().items():
-            if k not in ['self', 'cache_embedding']:
+            if k not in ['self']:
                 setattr(self, k, v)
         self.__post_init__()
-        if cache_embedding:
-            self.create_embedding = functools.lru_cache()(self.create_embedding)
 
     def __post_init__(self):
         if self.user_df is not None and not isinstance(self.user_df, pd.DataFrame):
@@ -76,17 +75,19 @@ class DemoData:
                          max_epochs=self.max_epochs, user_df=self.user_df, convert_time_unit=self.convert_time_unit)
 
     @torch.no_grad()
-    def create_embedding(self, explainer):
-        from ccrec.models.vae_lightning import VAEData
-        if 'embedding' in self.item_df:
-            return np.vstack(self.item_df['embedding'])
-        dm = VAEData(self.item_df, explainer.tokenizer)
-        dm.setup('predict')
-        item_emb = [
-            explainer.item_tower(**{k: v.to(explainer.item_tower.device) for k, v in batch.items()}).cpu().numpy()
-            for batch in dm.predict_dataloader()
-        ]
-        return np.vstack(item_emb)
+    def create_embedding(self, explainer, output_step='embedding'):
+        if output_step in self.item_df:
+            return np.vstack(self.item_df[output_step])
+            
+        ds = Dataset.from_pandas(self.item_df.rename({'TITLE': 'text'}, axis=1))
+        with _device_mode_context(explainer.item_tower) as model:
+            if 'cls' in ds:
+                ds = ds.map(model.to_map_fn('cls', output_step))
+            elif 'input_ids' in ds:
+                ds = ds.map(model.to_map_fn('inputs', output_step), batch_size=64)
+            else:
+                ds = ds.map(model.to_map_fn('text', output_step), batch_size=64)
+        return np.vstack(ds[output_step])
 
     def retrieve_similar(self, item_id, explainer, prior_score=None, topk=4):
         """ output batch_size * topk from a list of item_ids, a model explainer, and a prior_score matrix """

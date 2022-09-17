@@ -7,6 +7,10 @@ def demo_data_obj():
     return DemoData()
 
 
+def test_bbpr_main(demo_data_obj):
+    return demo_data_obj.run_bbpr_main()
+
+
 def test_vae_main(demo_data_obj):
     return demo_data_obj.run_vae_main()
 

@@ -85,14 +85,12 @@ class _BertBPR(_LitValidated):
             print(self._checkpoint.dirpath)
 
     def forward(self, batch):  # tokenized or ptr
-        output_step = getattr(self, "override_output_step", "embedding")
         if isinstance(batch, collections.abc.Mapping):  # tokenized
-            return self.item_tower(**batch, output_step=output_step)
+            return self.item_tower(**batch)
         elif hasattr(self, 'all_cls'):  # ptr
-            return self.item_tower(self.all_cls[batch], input_step='cls', output_step=output_step)
+            return self.item_tower(self.all_cls[batch], input_step='cls')
         else:  # ptr to all_inputs
-            return self.item_tower(**{k: v[batch] for k, v in self.all_inputs.items()},
-                                   output_step=output_step)
+            return self.item_tower(**{k: v[batch] for k, v in self.all_inputs.items()})
 
     def _pairwise(self, i, j):  # auto-broadcast on first dimension
         x = self.forward(self.i_to_ptr[i.ravel()]).reshape([*i.shape, -1])
@@ -144,14 +142,13 @@ class _BertBPR(_LitValidated):
 
 class _DataModule(LightningDataModule):
     def __init__(self, rime_dataset, item_index=None, item_tokenized=None, do_validation=None,
-                 batch_size=None, valid_batch_size=None, predict_batch_size=None):
+                 batch_size=None, valid_batch_size=None):
         super().__init__()
         self._D = rime_dataset
         self._item_tokenized = item_tokenized
         self._do_validation = do_validation
         self._batch_size = batch_size
         self._valid_batch_size = valid_batch_size
-        self._predict_batch_size = predict_batch_size
         self._num_batches = self._D.target_csr.nnz / self._batch_size
 
         item_to_ptr = {k: ptr for ptr, k in enumerate(item_index)}
@@ -182,12 +179,6 @@ class _DataModule(LightningDataModule):
     def val_dataloader(self):
         if self._do_validation:
             return DataLoader(self._valid_set, self._valid_batch_size, num_workers=self._num_workers)
-
-    def predict_dataloader(self):
-        dataset = Dataset.from_dict(self._item_tokenized)
-        return DataLoader(dataset, batch_size=self._predict_batch_size,
-                          num_workers=(len(dataset) > 1000) * 4,
-                          collate_fn=DefaultDataCollator())
 
 
 class BertBPR:
@@ -220,7 +211,6 @@ class BertBPR:
 
         self.model = _BertBPR(self.all_inputs, **self._model_kw)
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
-        self.predict_batch_size = 6 * self.batch_size
 
         self._ckpt_dirpath = []
         self._logger = TensorBoardLogger('logs', "BertBPR")
@@ -231,7 +221,13 @@ class BertBPR:
 
     def _get_data_module(self, V):
         return _DataModule(V, self.item_titles.index, self.all_inputs, self.do_validation,
-                           self.batch_size, self.valid_batch_size, self.predict_batch_size)
+                           self.batch_size, self.valid_batch_size)
+
+    def _transform_item_corpus(self, item_tower, output_step):
+        with _device_mode_context(item_tower) as item_tower:
+            ds = Dataset.from_pandas(self.item_titles.to_frame('text'))
+            out = ds.map(item_tower.to_map_fn('text', output_step), batch_size=64)[output_step]
+            return np.vstack(out)
 
     @empty_cache_on_exit
     def fit(self, V=None, _lr_find=False):
@@ -246,10 +242,8 @@ class BertBPR:
             log_every_n_steps=1, callbacks=[model._checkpoint, LearningRateMonitor()])
 
         if self._model_kw['freeze_bert'] > 0:  # cache all_cls
-            model.override_output_step = 'cls'
-            all_cls = trainer.predict(model, datamodule=dm)
-            model.register_buffer("all_cls", torch.cat(all_cls), False)
-            del model.override_output_step  # restore to embedding
+            all_cls = self._transform_item_corpus(model.item_tower, 'cls')
+            model.register_buffer('all_cls', torch.as_tensor(all_cls), False)
 
         if _lr_find:
             lr_finder = trainer.tuner.lr_find(model, datamodule=dm,
@@ -276,10 +270,7 @@ class BertBPR:
     @torch.no_grad()
     def transform(self, D):
         dm = self._get_data_module(D)
-        trainer = Trainer(gpus=torch.cuda.device_count(), strategy=self.strategy)
-        all_emb = trainer.predict(self.model, datamodule=dm)
-        all_emb = torch.cat(all_emb)
-
+        all_emb = self._transform_item_corpus(self.model.item_tower, 'embedding')
         user_final = all_emb[dm.i_to_ptr]
         item_final = all_emb[dm.j_to_ptr]
         return auto_cast_lazy_score(user_final) @ item_final.T

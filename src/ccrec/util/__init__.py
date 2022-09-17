@@ -1,5 +1,6 @@
 import collections, contextlib
 import numpy as np
+from rime.util import auto_device
 
 
 def merge_unique(list_of_lists, num_per_list, total, rng=np.random):
@@ -24,7 +25,7 @@ def merge_unique(list_of_lists, num_per_list, total, rng=np.random):
 
 
 @contextlib.contextmanager
-def _device_mode_context(module, device, training):
+def _device_mode_context(module, device=auto_device(), training=False):
     old_device = getattr(module, "device", 'cpu')
     old_training = module.training
     module.to(device)
