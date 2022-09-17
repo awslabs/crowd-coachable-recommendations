@@ -81,11 +81,12 @@ class I2IExplainer:
         return dict(padding=True, return_tensors='pt', max_length=self.max_length, truncation=True)
 
     def _get_unitary_utility(self, texts):
-        if hasattr(self.item_tower, 'IS_AUTO_ENCODER') and self.item_tower.IS_AUTO_ENCODER:
+        from ccrec.models.item_tower import VAEItemTower
+        if isinstance(self.item_tower, VAEItemTower):
             _inputs = self.tokenizer(texts.tolist(), **self.tokenizer_kw)
             loss = self.item_tower(**_inputs, output_step='dict')[0].cpu().numpy()
             return -loss.ravel()
-        return np.ravel(1)
+        return np.ones(len(texts))
 
     def _get_pairwise_utility(self, x, cand_texts):
         _inputs = self.tokenizer(cand_texts.tolist(), **self.tokenizer_kw)

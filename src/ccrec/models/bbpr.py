@@ -11,6 +11,9 @@ import functools, torch, numpy as np, pandas as pd
 import os, itertools, dataclasses, warnings, collections, re, tqdm
 from ccrec.util import _device_mode_context
 from ccrec.util.shap_explainer import I2IExplainer
+from ccrec.models.item_tower import NaiveItemTower
+import rime
+from ccrec.env import create_zero_shot, parse_response
 
 # https://pytorch-lightning.readthedocs.io/en/stable/notebooks/lightning_examples/text-transformers.html
 
@@ -32,30 +35,6 @@ def _create_bert(model_name, freeze_bert):
     return model
 
 
-class _Tower(torch.nn.Module):
-    """ inputs -> model -> cls -> layer_norm -> final """
-    def __init__(self, model, layer_norm):
-        super().__init__()
-        self.model = model
-        self.layer_norm = layer_norm
-
-    @property
-    def device(self):
-        return self.model.device
-
-    def forward(self, cls=None, input_step='inputs', output_step='final', **inputs):
-        if input_step == 'inputs':
-            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-            cls = self.model(**inputs).last_hidden_state[:, 0]
-        else:  # cls
-            cls = cls.to(self.model.device)
-
-        if output_step == 'final':
-            return self.layer_norm(cls)
-        else:  # cls
-            return cls
-
-
 class _BertBPR(_LitValidated):
     def __init__(self, all_inputs, model_name='bert-base-uncased', freeze_bert=0,
                  n_negatives=10, valid_n_negatives=None, lr=None, weight_decay=None,
@@ -64,6 +43,7 @@ class _BertBPR(_LitValidated):
                  sample_with_prior=True, sample_with_posterior=0.5,
                  elementwise_affine=True,  # set to False to eliminate gradients from f(x)'f(x) in N/A class
                  pretrained_checkpoint=None,
+                 tokenizer=None, tokenizer_kw={},
                  **bpr_kw):
         super().__init__()
         if lr is None:
@@ -81,9 +61,10 @@ class _BertBPR(_LitValidated):
             setattr(self, name, getattr(self.hparams, name))
         self.training_prior_fcn = training_prior_fcn
 
-        self.item_tower = _Tower(
+        self.item_tower = NaiveItemTower(
             _create_bert(model_name, freeze_bert),
             torch.nn.LayerNorm(768, elementwise_affine=elementwise_affine),  # TODO: other transform layers
+            tokenizer=tokenizer, tokenizer_kw=tokenizer_kw,
         )
         self.all_inputs = all_inputs
 
@@ -104,14 +85,12 @@ class _BertBPR(_LitValidated):
             print(self._checkpoint.dirpath)
 
     def forward(self, batch):  # tokenized or ptr
-        output_step = getattr(self, "override_output_step", "final")
         if isinstance(batch, collections.abc.Mapping):  # tokenized
-            return self.item_tower(**batch, output_step=output_step)
+            return self.item_tower(**batch)
         elif hasattr(self, 'all_cls'):  # ptr
-            return self.item_tower(self.all_cls[batch], input_step='cls', output_step=output_step)
+            return self.item_tower(self.all_cls[batch], input_step='cls')
         else:  # ptr to all_inputs
-            return self.item_tower(**{k: v[batch] for k, v in self.all_inputs.items()},
-                                   output_step=output_step)
+            return self.item_tower(**{k: v[batch] for k, v in self.all_inputs.items()})
 
     def _pairwise(self, i, j):  # auto-broadcast on first dimension
         x = self.forward(self.i_to_ptr[i.ravel()]).reshape([*i.shape, -1])
@@ -157,17 +136,19 @@ class _BertBPR(_LitValidated):
             return torch.optim.Adagrad(self.parameters(),
                                        eps=1e-3, lr=self.lr, weight_decay=self.weight_decay)
 
+    def to_explainer(self, **kw):
+        return self.item_tower.to_explainer(**kw)
+
 
 class _DataModule(LightningDataModule):
     def __init__(self, rime_dataset, item_index=None, item_tokenized=None, do_validation=None,
-                 batch_size=None, valid_batch_size=None, predict_batch_size=None):
+                 batch_size=None, valid_batch_size=None):
         super().__init__()
         self._D = rime_dataset
         self._item_tokenized = item_tokenized
         self._do_validation = do_validation
         self._batch_size = batch_size
         self._valid_batch_size = valid_batch_size
-        self._predict_batch_size = predict_batch_size
         self._num_batches = self._D.target_csr.nnz / self._batch_size
 
         item_to_ptr = {k: ptr for ptr, k in enumerate(item_index)}
@@ -199,12 +180,6 @@ class _DataModule(LightningDataModule):
         if self._do_validation:
             return DataLoader(self._valid_set, self._valid_batch_size, num_workers=self._num_workers)
 
-    def predict_dataloader(self):
-        dataset = Dataset.from_dict(self._item_tokenized)
-        return DataLoader(dataset, batch_size=self._predict_batch_size,
-                          num_workers=(len(dataset) > 1000) * 4,
-                          collate_fn=DefaultDataCollator())
-
 
 class BertBPR:
     def __init__(self, item_df, freeze_bert=0, batch_size=None,
@@ -220,7 +195,6 @@ class BertBPR:
             strategy = 'dp' if torch.cuda.device_count() > 1 else None
 
         self.item_titles = item_df['TITLE']
-        self._model_kw = {"freeze_bert": freeze_bert, "do_validation": do_validation, **kw}
         self.max_length = max_length
         self.batch_size = batch_size
         self.do_validation = do_validation
@@ -229,13 +203,14 @@ class BertBPR:
         self.strategy = strategy
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.all_inputs = self.tokenizer(
-            self.item_titles.tolist(), padding='max_length', return_tensors='pt',
-            max_length=self.max_length, truncation=True
-        )
+        self.tokenizer_kw = dict(padding='max_length', return_tensors='pt',
+                                 max_length=self.max_length, truncation=True)
+        self.all_inputs = self.tokenizer(self.item_titles.tolist(), **self.tokenizer_kw)
+        self._model_kw = {"freeze_bert": freeze_bert, "do_validation": do_validation, **kw,
+                          "tokenizer": self.tokenizer, "tokenizer_kw": self.tokenizer_kw}
+
         self.model = _BertBPR(self.all_inputs, **self._model_kw)
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
-        self.predict_batch_size = 6 * self.batch_size
 
         self._ckpt_dirpath = []
         self._logger = TensorBoardLogger('logs', "BertBPR")
@@ -246,7 +221,13 @@ class BertBPR:
 
     def _get_data_module(self, V):
         return _DataModule(V, self.item_titles.index, self.all_inputs, self.do_validation,
-                           self.batch_size, self.valid_batch_size, self.predict_batch_size)
+                           self.batch_size, self.valid_batch_size)
+
+    def _transform_item_corpus(self, item_tower, output_step):
+        with _device_mode_context(item_tower) as item_tower:
+            ds = Dataset.from_pandas(self.item_titles.to_frame('text'))
+            out = ds.map(item_tower.to_map_fn('text', output_step), batch_size=64)[output_step]
+            return np.vstack(out)
 
     @empty_cache_on_exit
     def fit(self, V=None, _lr_find=False):
@@ -261,10 +242,8 @@ class BertBPR:
             log_every_n_steps=1, callbacks=[model._checkpoint, LearningRateMonitor()])
 
         if self._model_kw['freeze_bert'] > 0:  # cache all_cls
-            model.override_output_step = 'cls'
-            all_cls = trainer.predict(model, datamodule=dm)
-            model.register_buffer("all_cls", torch.cat(all_cls), False)
-            del model.override_output_step  # restore to final
+            all_cls = self._transform_item_corpus(model.item_tower, 'cls')
+            model.register_buffer('all_cls', torch.as_tensor(all_cls), False)
 
         if _lr_find:
             lr_finder = trainer.tuner.lr_find(model, datamodule=dm,
@@ -291,14 +270,48 @@ class BertBPR:
     @torch.no_grad()
     def transform(self, D):
         dm = self._get_data_module(D)
-        trainer = Trainer(gpus=torch.cuda.device_count(), strategy=self.strategy)
-        all_emb = trainer.predict(self.model, datamodule=dm)
-        all_emb = torch.cat(all_emb)
-
+        all_emb = self._transform_item_corpus(self.model.item_tower, 'embedding')
         user_final = all_emb[dm.i_to_ptr]
         item_final = all_emb[dm.j_to_ptr]
         return auto_cast_lazy_score(user_final) @ item_final.T
 
     def to_explainer(self, **kw):
-        tower = self.model.item_tower.to(auto_device()).eval()
-        return I2IExplainer(tower, self.tokenizer, **kw)
+        return self.model.to_explainer(**kw)
+
+
+def bbpr_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, beta=0.0,
+              user_df=None, convert_time_unit='s'):
+    """
+    item_df = get_item_df()[0]
+    expl_response = pd.read_json(
+        'vae-1000-queries-10-steps-response.json', lines=True, convert_dates=False
+    ).set_index('level_0')
+    gnd_response = pd.read_json(
+        'prime-pantry-i2i-online-baseline4-response.json', lines=True, convert_dates=False
+    ).set_index('level_0')
+    """
+    zero_shot = create_zero_shot(item_df, user_df=user_df)
+    train_requests = expl_response.set_index('request_time', append=True)
+    expl_events = parse_response(expl_response, convert_time_unit=convert_time_unit)
+    V = rime.dataset.Dataset(
+        zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, expl_events]),
+        test_requests=train_requests[[]], test_update_history=False, horizon=0.1, sample_with_prior=1)
+    assert V.target_csr.nnz > 0
+
+    bbpr = BertBPR(
+        item_df, max_epochs=max_epochs, batch_size=10 * max(1, torch.cuda.device_count()),
+        sample_with_prior=True, sample_with_posterior=0,
+        replacement=False, n_negatives=5, valid_n_negatives=5,
+        training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
+    )
+    bbpr.fit(V)
+
+    gnd_events = parse_response(gnd_response, convert_time_unit=convert_time_unit)
+    gnd = rime.dataset.Dataset(
+        zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, gnd_events]),
+        test_requests=gnd_response.set_index('request_time', append=True)[[]],
+        sample_with_prior=1e5)
+    reranking_scores = bbpr.transform(gnd) + gnd.prior_score
+    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+
+    return metrics, reranking_scores, bbpr

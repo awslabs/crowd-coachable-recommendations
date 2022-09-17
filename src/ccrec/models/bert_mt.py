@@ -1,41 +1,16 @@
 import numpy as np, torch, torch.nn.functional as F, tqdm, os, pandas as pd
 from pytorch_lightning.trainer.supporters import CombinedLoader
 from ccrec.models.bbpr import (
-    _Tower, _BertBPR, sps_to_torch, _device_mode_context, auto_device, BertBPR,
+    _BertBPR, sps_to_torch, _device_mode_context, auto_device, BertBPR,
     AutoTokenizer, TensorBoardLogger, empty_cache_on_exit, _DataModule, Trainer,
     LightningDataModule, DataLoader, auto_cast_lazy_score, I2IExplainer,
     default_random_split, _LitValidated)
-from ccrec.models.vae_models import MaskedPretrainedModel, VAEPretrainedModel
+from ccrec.models import vae_models
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 from ccrec.models.vae_lightning import VAEData
 import rime
 from ccrec.env import create_zero_shot, parse_response
-
-
-class _TowerMT(_Tower):
-    IS_AUTO_ENCODER = True
-
-    def __init__(self, model, layer_norm='inferred from model'):
-        super().__init__(model, torch.nn.Sequential(
-            model.vocab_transform,
-            model.activation,
-            model.standard_layer_norm))
-
-    def forward(self, cls=None, input_step='inputs', output_step='final', **inputs):
-        if input_step == 'inputs':
-            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-            if output_step == 'cls':
-                mean, std = self.model(**inputs, return_mean_std=True)
-                assert std == 0, "calling cls on vae model is ambiguous"
-                return mean
-            if output_step == 'final':
-                return self.model(**inputs, return_embedding=True)  # standard_layer_norm
-            elif output_step == 'dict':
-                return self.model(**inputs, return_dict=True)  # ct loss and logits
-
-        elif input_step == 'cls':
-            if output_step == 'final':
-                return self.layer_norm(cls)
+from ccrec.models.item_tower import VAEItemTower
 
 
 class _BertMT(_BertBPR):
@@ -46,6 +21,7 @@ class _BertMT(_BertBPR):
                  replacement=True,
                  sample_with_prior=True, sample_with_posterior=0.5,
                  pretrained_checkpoint=None,
+                 model_cls_name='VAEPretrainedModel', tokenizer=None, tokenizer_kw={},
                  ):
         super(_BertBPR, self).__init__()
         if valid_n_negatives is None:
@@ -61,10 +37,10 @@ class _BertMT(_BertBPR):
 
         if pretrained_checkpoint is None:
             pretrained_checkpoint = model_name
-        vae_model = VAEPretrainedModel.from_pretrained(pretrained_checkpoint)
+        vae_model = getattr(vae_models, model_cls_name).from_pretrained(pretrained_checkpoint)
         if hasattr(vae_model, 'set_beta'):
             vae_model.set_beta(beta)
-        self.item_tower = _TowerMT(vae_model)
+        self.item_tower = VAEItemTower(vae_model, tokenizer=tokenizer, tokenizer_kw=tokenizer_kw)
 
         self.all_inputs = all_inputs
         self.alpha = alpha
@@ -85,14 +61,16 @@ class _BertMT(_BertBPR):
         return torch.optim.AdamW(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
 
+    def to_explainer(self, **kw):
+        return self.item_tower.to_explainer(**kw)
+
 
 class _DataMT(_DataModule):
     def __init__(self, rime_dataset, item_df, tokenizer, all_inputs, do_validation=None,
-                 batch_size=None, valid_batch_size=None, predict_batch_size=None,
-                 **tokenizer_kw):
+                 batch_size=None, valid_batch_size=None, vae_batch_size=None, **tokenizer_kw):
         super().__init__(rime_dataset, item_df.index, all_inputs, do_validation,
-                         batch_size, valid_batch_size, predict_batch_size)
-        self._ct = VAEData(item_df, tokenizer, predict_batch_size, do_validation, **tokenizer_kw)
+                         batch_size, valid_batch_size)
+        self._ct = VAEData(item_df, tokenizer, vae_batch_size, do_validation, **tokenizer_kw)
         self.training_data.update({
             'ct_cycles': max(1, self._num_batches / self._ct._num_batches),
             'ft_cycles': max(1, self._ct._num_batches / self._num_batches),
@@ -116,7 +94,7 @@ class _DataMT(_DataModule):
 
 class BertMT(BertBPR):
     def __init__(self, item_df, batch_size=10,
-                 model_name='distilbert-base-uncased', max_length=30,
+                 model_cls_name='VAEPretrainedModel', model_name='distilbert-base-uncased', max_length=30,
                  max_epochs=10, max_steps=-1, do_validation=None,
                  strategy=None, query_item_position_in_user_history=0,
                  **_model_kw):
@@ -132,15 +110,17 @@ class BertMT(BertBPR):
         self.max_epochs = max_epochs
         self.max_steps = max_steps
         self.strategy = strategy
-        self._model_kw = {**_model_kw, 'model_name': model_name}
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer_kw = dict(padding='max_length', max_length=self.max_length, truncation=True)
         self.all_inputs = self.tokenizer(self.item_titles.tolist(), return_tensors='pt', **self.tokenizer_kw)
 
+        self._model_kw = {**_model_kw, 'model_name': model_name, 'model_cls_name': model_cls_name,
+                          'tokenizer': self.tokenizer, 'tokenizer_kw': self.tokenizer_kw}
+
         self.model = _BertMT(self.all_inputs, **self._model_kw)
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
-        self.predict_batch_size = 6 * self.batch_size
+        self.vae_batch_size = 6 * self.batch_size
 
         self._ckpt_dirpath = []
         self._logger = TensorBoardLogger('logs', "BertMT")
@@ -151,7 +131,7 @@ class BertMT(BertBPR):
 
     def _get_data_module(self, V):
         return _DataMT(V, self.item_titles.to_frame(), self.tokenizer, self.all_inputs, self.do_validation,
-                       self.batch_size, self.valid_batch_size, self.predict_batch_size)
+                       self.batch_size, self.valid_batch_size, self.vae_batch_size)
 
     @empty_cache_on_exit
     def fit(self, V=None):
