@@ -43,7 +43,7 @@ class LitVAEModel(_LitValidated):
 
 
 class VAEData(LightningDataModule):
-    def __init__(self, item_df, tokenizer, batch_size=64, do_validation=True,
+    def __init__(self, item_df, tokenizer, batch_size=64, do_validation=True, masked=False,
                  truncation=True, padding='max_length', max_length=32, **kw):
         super().__init__()
         self._item_df = item_df
@@ -51,7 +51,8 @@ class VAEData(LightningDataModule):
         self._do_validation = do_validation
         self._tokenizer_fn = lambda x: tokenizer(
             x['TITLE'], truncation=truncation, padding=padding, max_length=max_length, **kw)
-        self._collate_fn = DefaultDataCollator()
+        self._collate_fn = DataCollatorForLanguageModeling(tokenizer) if masked else DefaultDataCollator()
+        print('masked', masked)
         self._num_batches = len(item_df) / self._batch_size
 
     def setup(self, stage):
@@ -78,7 +79,7 @@ class VAEData(LightningDataModule):
 
 
 def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
-             user_df=None, convert_time_unit='s'):
+             user_df=None, convert_time_unit='s', model_cls_name='VAEPretrainedModel', masked=None):
     """
     item_df = get_item_df()[0]  # indexed by ITEM_ID
     gnd_response = pd.read_json(
@@ -87,10 +88,12 @@ def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
     """
     if train_df is None:
         train_df = item_df
+    if masked is None:
+        masked = model_cls_name != 'VAEPretrainedModel'
 
     tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
-    tower = LitVAEModel(beta, tokenizer=tokenizer)
-    train_dm = VAEData(train_df, tokenizer, 64 * max(1, torch.cuda.device_count()))
+    tower = LitVAEModel(beta, tokenizer=tokenizer, model_cls_name=model_cls_name)
+    train_dm = VAEData(train_df, tokenizer, 64 * max(1, torch.cuda.device_count()), masked=masked)
     trainer = Trainer(max_epochs=max_epochs, gpus=torch.cuda.device_count(),
                       strategy='dp' if torch.cuda.device_count() else None,
                       log_every_n_steps=1)
@@ -98,7 +101,7 @@ def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
 
     ds = Dataset.from_pandas(item_df.rename({'TITLE': 'text'}, axis=1))
     with _device_mode_context(tower.model) as model, torch.no_grad():
-        ds = ds.map(model.to_map_fn('text', 'embedding'), batch_size=64)
+        ds = ds.map(model.to_map_fn('text', 'embedding'), batched=True, batch_size=64)
     item_emb = np.vstack(ds['embedding'])
     varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
 
