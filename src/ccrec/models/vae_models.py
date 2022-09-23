@@ -12,13 +12,18 @@ from torch.nn import CrossEntropyLoss
 import copy
 
 class EmbeddingModel(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, freeze_bert=False):
         super().__init__(config)
 
-        self.activation = get_activation(config.activation)
-
         self.distilbert = DistilBertModel(config)
-        self.vocab_transform = nn.Linear(config.dim, config.dim)
+
+        if freeze_bert:
+            self.vocab_transform = torch.nn.Identity()
+            self.activation = torch.nn.Identity()
+        else:
+            self.vocab_transform = nn.Linear(config.dim, config.dim)
+            self.activation = get_activation(config.activation)
+
         self.vocab_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
         self.vocab_projector = nn.Linear(config.dim, config.vocab_size)
 
@@ -28,7 +33,10 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         self.standard_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
 
         self.loss_fct = nn.CrossEntropyLoss(reduction='none')
-        self.cls_to_embedding
+
+        if freeze_bert:
+            for param in self.distilbert.parameters():
+                param.requires_grad = False
 
     def generate_mean(self,hidden_states):
         raise NotImplementedError("return type: torch.Tensor")
@@ -120,8 +128,8 @@ class EmbeddingModel(DistilBertPreTrainedModel):
 
 
 class MaskedPretrainedModel(EmbeddingModel):
-    def __init__(self, config: PretrainedConfig):
-        super().__init__(config)
+    def __init__(self, config: PretrainedConfig, **kw):
+        super().__init__(config, **kw)
         self.std = 0.0
 
     def generate_mean(self,hidden_states):
@@ -131,9 +139,18 @@ class MaskedPretrainedModel(EmbeddingModel):
         return self.std
     
     def compute_output_loss(self, mu, std, prediction_logits, input_ids, labels):
+        if labels is None:
+            labels = input_ids if int(os.environ.get('CCREC_LEGACY_VAE_BUG', 0)) else \
+                     torch.where(input_ids == 0, -100, input_ids)
+
         label_density = (labels != -100).sum(1).float().mean()
         recon_loss = self.loss_fct(prediction_logits.swapaxes(1, 2), labels)
         return recon_loss.sum(1) / label_density
+
+
+class FrozenPretrainedModel(MaskedPretrainedModel):
+    def __init__(self, config: PretrainedConfig):
+        super().__init__(config, freeze_bert=True)
 
 
 class VAEPretrainedModel(EmbeddingModel):

@@ -34,6 +34,7 @@ class DemoData:
         gnd_response='test_response.json',
         max_epochs=1,
         convert_time_unit=None,
+        model_cls_name='VAEPretrainedModel',
     ):
         for k, v in locals().items():
             if k not in ['self']:
@@ -60,7 +61,8 @@ class DemoData:
     @functools.lru_cache()
     def run_vae_main(self):
         from ccrec.models.vae_lightning import vae_main
-        return vae_main(self.item_df, self.gnd_response, max_epochs=self.max_epochs, user_df=self.user_df)
+        return vae_main(self.item_df, self.gnd_response, max_epochs=self.max_epochs, user_df=self.user_df,
+                        model_cls_name=self.model_cls_name)
 
     @functools.lru_cache()
     def run_bmt_main(self):
@@ -84,9 +86,9 @@ class DemoData:
             if 'cls' in ds:
                 ds = ds.map(model.to_map_fn('cls', output_step))
             elif 'input_ids' in ds:
-                ds = ds.map(model.to_map_fn('inputs', output_step), batch_size=64)
+                ds = ds.map(model.to_map_fn('inputs', output_step), batched=True, batch_size=64)
             else:
-                ds = ds.map(model.to_map_fn('text', output_step), batch_size=64)
+                ds = ds.map(model.to_map_fn('text', output_step), batched=True, batch_size=64)
         return np.vstack(ds[output_step])
 
     def retrieve_similar(self, item_id, explainer, prior_score=None, topk=4):

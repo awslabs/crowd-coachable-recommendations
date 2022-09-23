@@ -226,7 +226,7 @@ class BertBPR:
     def _transform_item_corpus(self, item_tower, output_step):
         with _device_mode_context(item_tower) as item_tower:
             ds = Dataset.from_pandas(self.item_titles.to_frame('text'))
-            out = ds.map(item_tower.to_map_fn('text', output_step), batch_size=64)[output_step]
+            out = ds.map(item_tower.to_map_fn('text', output_step), batched=True, batch_size=64)[output_step]
             return np.vstack(out)
 
     @empty_cache_on_exit
