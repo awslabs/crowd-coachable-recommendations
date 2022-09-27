@@ -61,7 +61,6 @@ class _BertBPR(_LitValidated):
             setattr(self, name, getattr(self.hparams, name))
         self.training_prior_fcn = training_prior_fcn
 
-        # TODO: weird that item_tower.device does not agree with item_tower.cls_model.device
         self.item_tower = NaiveItemTower(
             _create_bert(model_name, freeze_bert),
             torch.nn.LayerNorm(768, elementwise_affine=elementwise_affine),  # TODO: other transform layers
