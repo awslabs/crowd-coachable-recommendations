@@ -162,8 +162,7 @@ class BertMT(BertBPR):
         return self
 
 
-def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, beta=0.0,
-             user_df=None, convert_time_unit='s'):
+def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, beta=0.0, user_df=None):
     """
     item_df = get_item_df()[0]
     expl_response = pd.read_json(
@@ -175,7 +174,7 @@ def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, be
     """
     zero_shot = create_zero_shot(item_df, user_df=user_df)
     train_requests = expl_response.set_index('request_time', append=True)
-    expl_events = parse_response(expl_response, convert_time_unit=convert_time_unit)
+    expl_events = parse_response(expl_response)
     V = rime.dataset.Dataset(
         zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, expl_events]),
         test_requests=train_requests[[]], test_update_history=False, horizon=0.1, sample_with_prior=1)
@@ -190,7 +189,7 @@ def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, be
     )
     bmt.fit(V)
 
-    gnd_events = parse_response(gnd_response, convert_time_unit=convert_time_unit)
+    gnd_events = parse_response(gnd_response)
     gnd = rime.dataset.Dataset(
         zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, gnd_events]),
         test_requests=gnd_response.set_index('request_time', append=True)[[]],

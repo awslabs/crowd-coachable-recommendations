@@ -79,7 +79,7 @@ class VAEData(LightningDataModule):
 
 
 def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
-             user_df=None, convert_time_unit='s', model_cls_name='VAEPretrainedModel', masked=None):
+             user_df=None, model_cls_name='VAEPretrainedModel', masked=None):
     """
     item_df = get_item_df()[0]  # indexed by ITEM_ID
     gnd_response = pd.read_json(
@@ -107,7 +107,7 @@ def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
 
     # evaluation
     zero_shot = create_zero_shot(item_df, user_df=user_df)
-    gnd_events = parse_response(gnd_response, convert_time_unit=convert_time_unit)
+    gnd_events = parse_response(gnd_response)
     gnd = rime.dataset.Dataset(
         zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, gnd_events]),
         test_requests=gnd_response.set_index('request_time', append=True)[[]],

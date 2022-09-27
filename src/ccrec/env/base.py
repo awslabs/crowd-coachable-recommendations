@@ -234,7 +234,16 @@ def _expand_na_class(request):
                            _group=request['_group'].apply(lambda x: x + [-1]))
 
 
-def parse_response(response, step_idx=None, convert_time_unit='s'):
+def _sanitize_timestamp(x):
+    while x.max() > time.time():
+        warnings.warn("Sanitizing timestamp by the unit of the second;"
+                      " please make sure that the unit stays consistent with all other parts of the code.")
+        x = x / 1e3
+    return x
+
+
+def parse_response(response, step_idx=None):
+    response = response.assign(request_time=_sanitize_timestamp(response['request_time']))
     if step_idx is None:
         step_idx = response['request_time'].rank(method='dense').values - 1
     response = response.assign(step_idx=step_idx).set_index("step_idx", append=True)
@@ -247,9 +256,6 @@ def parse_response(response, step_idx=None, convert_time_unit='s'):
 
     if '_group' in response:
         new_events['_group'] = response['_group'].explode().values
-
-    while convert_time_unit == 's' and new_events['TIMESTAMP'].max() > time.time():
-        new_events['TIMESTAMP'] = new_events['TIMESTAMP'] / 1e3
     return new_events.reset_index(drop=True)
 
 
