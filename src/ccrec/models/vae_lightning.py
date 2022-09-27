@@ -68,9 +68,8 @@ class VAEData(LightningDataModule):
             self._ds = self._ds.map(self._tokenizer_fn, remove_columns=['TITLE'])
 
     def train_dataloader(self):
-        if 'train' in self._ds:
-            return DataLoader(self._ds['train'], batch_size=self._batch_size,
-                              collate_fn=self._collate_fn, shuffle=True)
+        return DataLoader(self._ds['train'], batch_size=self._batch_size,
+                          collate_fn=self._collate_fn, shuffle=True)
 
     def val_dataloader(self):
         if 'valid' in self._ds:
