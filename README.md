@@ -10,6 +10,10 @@ Codes for zero-shot recommendations and subsequent online learning and explorati
 * If you encounter a `numba` error, please run this: `pip install --no-cache-dir --ignore-installed -U numba`
 * To test: `from ccrec.util.demo_data import DemoData; DemoData().run_shap()`
 
+## Data Preparation
+CCRec considers both unsupervised and semi-supervised datasets for training purposes. Unsupervised datasets contain only item dataframes (`item_df`) and semi-supervised datasets contain `user_df` and `response_df` as well. The final dataset can be constructed through `ccrec.env.base.create_zero_shot` and `create_reranking_dataset` functions, respectively.
+![ccrec_data.png](figure/ccrec_data.png)
+
 ## Contributing
 
 * Write access is managed. Please use pull requests to introduce any changes.
