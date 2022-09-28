@@ -13,7 +13,7 @@ from ccrec.util import _device_mode_context
 from ccrec.util.shap_explainer import I2IExplainer
 from ccrec.models.item_tower import NaiveItemTower
 import rime
-from ccrec.env import create_zero_shot, parse_response
+from ccrec.env import create_reranking_dataset
 
 # https://pytorch-lightning.readthedocs.io/en/stable/notebooks/lightning_examples/text-transformers.html
 
@@ -289,12 +289,7 @@ def bbpr_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, b
         'prime-pantry-i2i-online-baseline4-response.json', lines=True, convert_dates=False
     ).set_index('level_0')
     """
-    zero_shot = create_zero_shot(item_df, user_df=user_df)
-    train_requests = expl_response.set_index('request_time', append=True)
-    expl_events = parse_response(expl_response)
-    V = rime.dataset.Dataset(
-        zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, expl_events]),
-        test_requests=train_requests[[]], test_update_history=False, horizon=0.1, sample_with_prior=1)
+    V = create_reranking_dataset(user_df, item_df, expl_response, reranking_prior=1)
     assert V.target_csr.nnz > 0
 
     bbpr = BertBPR(
@@ -305,11 +300,7 @@ def bbpr_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, b
     )
     bbpr.fit(V)
 
-    gnd_events = parse_response(gnd_response)
-    gnd = rime.dataset.Dataset(
-        zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, gnd_events]),
-        test_requests=gnd_response.set_index('request_time', append=True)[[]],
-        sample_with_prior=1e5)
+    gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
     reranking_scores = bbpr.transform(gnd) + gnd.prior_score
     metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 

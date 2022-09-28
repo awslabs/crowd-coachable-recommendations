@@ -9,7 +9,7 @@ import rime
 from rime.util import _LitValidated
 from ccrec.util import _device_mode_context
 from rime.models.zero_shot import ItemKNN
-from ccrec.env import create_zero_shot, parse_response
+from ccrec.env import create_reranking_dataset
 from ccrec.models.item_tower import VAEItemTower
 
 
@@ -105,13 +105,7 @@ def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
     varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
 
     # evaluation
-    zero_shot = create_zero_shot(item_df, user_df=user_df)
-    gnd_events = parse_response(gnd_response)
-    gnd = rime.dataset.Dataset(
-        zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, gnd_events]),
-        test_requests=gnd_response.set_index('request_time', append=True)[[]],
-        sample_with_prior=1e5)
-
+    gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
     reranking_scores = varCT.transform(gnd) + gnd.prior_score
     metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 

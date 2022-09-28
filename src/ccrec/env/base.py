@@ -2,19 +2,19 @@ import os, warnings, dataclasses, collections, itertools, time, functools, typin
 import pandas as pd, numpy as np, scipy.sparse as sps
 from pytorch_lightning.loggers import TensorBoardLogger
 from ccrec.util import merge_unique
+import rime
 from rime.dataset import Dataset
 from rime.util import indices2csr, perplexity, matrix_reindex
 
 
-def create_zero_shot(item_df, self_training=False, user_df=None):
-    if user_df is None:
-        user_df = pd.DataFrame([{
-            "USER_ID": u,
-            "TEST_START_TIME": 1,
-            "_hist_items": [v],
-            "_hist_ts": [0],
-        } for u, v in enumerate(item_df.index.values)
-        ]).set_index("USER_ID")
+def create_zero_shot(item_df, self_training=False):
+    user_df = pd.DataFrame([{
+        "USER_ID": u,
+        "TEST_START_TIME": 1,
+        "_hist_items": [v],
+        "_hist_ts": [0],
+    } for u, v in enumerate(item_df.index.values)
+    ]).set_index("USER_ID")
 
     event_df = user_df["_hist_items"].explode().to_frame("ITEM_ID")
     event_df["TIMESTAMP"] = user_df["_hist_ts"].explode()
@@ -26,6 +26,38 @@ def create_zero_shot(item_df, self_training=False, user_df=None):
         target_df['TIMESTAMP'] = target_df.index.get_level_values(-1)
         event_df = pd.concat([event_df, target_df], ignore_index=True)
     return Dataset(user_df, item_df, event_df)
+
+
+def _sanitize_response(response):
+    if 'request_time' in response:
+        response = response.set_index('request_time', append=True)
+    return response
+
+
+def create_reranking_dataset(user_df, item_df, response=None, reranking_prior=1,
+                             horizon=0.1, test_update_history=False):
+    """ require user_df to be indexed by USER_ID and contains _hist_items and _hist_ts columns """
+    past_event_df = user_df['_hist_items'].explode().to_frame('ITEM_ID')
+    past_event_df['TIMESTAMP'] = user_df['_hist_ts'].explode().values
+
+    past_event_df['USER_ID'] = past_event_df.index.get_level_values(0)
+    past_event_df['VALUE'] = 1  # ITEM_ID, TIMESTAMP, USER_ID
+
+    if response is not None:
+        response = _sanitize_response(response)
+
+    event_df = past_event_df.reset_index(drop=True) if response is None else \
+        pd.concat([past_event_df, parse_response(response)], ignore_index=True)
+
+    test_requests = None if response is None else \
+        pd.DataFrame(index=pd.MultiIndex.from_arrays([
+            response.index.get_level_values(0),
+            response.index.get_level_values(-1),
+        ]))
+
+    return rime.dataset.Dataset(user_df, item_df, event_df, test_requests,
+                                sample_with_prior=reranking_prior,
+                                horizon=horizon, test_update_history=test_update_history)
 
 
 def _sanitize_inputs(event_df, user_df, item_df, clear_future_events=None):
@@ -183,9 +215,8 @@ class Env:
                        horizon=self.horizon,
                        sample_with_prior=self.sample_with_prior)
 
-    def _create_training_dataset(self, before_step_idx=float('inf'), test_update_history=False):
-        test_requests = self.event_df.query(f"0 <= step_idx < {before_step_idx}").groupby(
-            ['USER_ID', 'TIMESTAMP']).size().to_frame('_siz')
+    def _create_training_dataset(self, test_update_history=False):
+        test_requests = self.event_df.groupby(['USER_ID', 'TIMESTAMP']).size().to_frame('_siz')
         return Dataset(self.user_df, self.item_df, self.event_df,
                        test_requests, self.item_in_test,
                        exclude_train=self.exclude_train,
@@ -243,19 +274,17 @@ def _sanitize_timestamp(x):
 
 
 def parse_response(response, step_idx=None):
-    response = response.assign(request_time=_sanitize_timestamp(response['request_time']))
-    if step_idx is None:
-        step_idx = response['request_time'].rank(method='dense').values - 1
-    response = response.assign(step_idx=step_idx).set_index("step_idx", append=True)
-
+    response = _sanitize_response(response)
     new_events = response['cand_items'].explode().to_frame("ITEM_ID")
     new_events['USER_ID'] = new_events.index.get_level_values(0)
-    new_events['TIMESTAMP'] = response['request_time']  # reindex to explode
+    new_events['TIMESTAMP'] = new_events.index.get_level_values(-1)
     new_events['VALUE'] = response['multi_label'].explode().values
-    new_events['step_idx'] = new_events.index.get_level_values(-1)
 
     if '_group' in response:
         new_events['_group'] = response['_group'].explode().values
+    if step_idx is not None:
+        new_events['step_idx'] = step_idx  # for visualization only
+
     return new_events.reset_index(drop=True)
 
 
