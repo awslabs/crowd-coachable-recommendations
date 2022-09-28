@@ -31,6 +31,15 @@ def create_zero_shot(item_df, self_training=False):
 def _sanitize_response(response):
     if 'request_time' in response:
         response = response.set_index('request_time', append=True)
+
+    request_time = response.index.get_level_values(-1)
+    while request_time.max() > time.time():
+        warnings.warn("Sanitizing request_time by the unit of the second;"
+                      " please make sure that the unit stays consistent with all other parts of the code.")
+        response = response.reset_index(level=-1, drop=True) \
+                           .assign(request_time=request_time / 1e3) \
+                           .set_index('request_time', append=True)
+        request_time = response.index.get_level_values(-1)
     return response
 
 
@@ -263,14 +272,6 @@ def _expand_na_class(request):
     _expand_cand_items = lambda x: list(x['cand_items']) + [x['_hist_items'][-1]]
     return request.assign(cand_items=request.apply(_expand_cand_items, axis=1),
                            _group=request['_group'].apply(lambda x: x + [-1]))
-
-
-def _sanitize_timestamp(x):
-    while x.max() > time.time():
-        warnings.warn("Sanitizing timestamp by the unit of the second;"
-                      " please make sure that the unit stays consistent with all other parts of the code.")
-        x = x / 1e3
-    return x
 
 
 def parse_response(response, step_idx=None):
