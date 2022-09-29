@@ -43,9 +43,14 @@ def _sanitize_response(response):
     return response
 
 
-def create_reranking_dataset(user_df, item_df, response=None, reranking_prior=1,
-                             horizon=0.1, test_update_history=False):
-    """ require user_df to be indexed by USER_ID and contains _hist_items and _hist_ts columns """
+def create_reranking_dataset(user_df, item_df, response=None,
+                             reranking_prior=1,  # use 1 for training and 1e5 for testing
+                             horizon=0.1, test_update_history=False,  # keep at default values
+                             ):
+    """ require user_df to be indexed by USER_ID and contains _hist_items and _hist_ts columns
+    use reranking_prior=1 for training and reranking_prior=1e5 for testing
+    keep horizon and test_update_hisotory at the default values.
+    """
     past_event_df = user_df['_hist_items'].explode().to_frame('ITEM_ID')
     past_event_df['TIMESTAMP'] = user_df['_hist_ts'].explode().values
 
