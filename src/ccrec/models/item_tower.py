@@ -47,7 +47,8 @@ class NaiveItemTower(ItemTowerBase):
             input_step = 'inputs'
 
         if input_step == 'inputs':
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            # bugfix: weird that self.device does not agree with self.cls_model.device
+            inputs = {k: v.to(self.cls_model.device) for k, v in inputs.items()}
             cls = self.cls_model(**inputs).last_hidden_state[:, 0]
         else:  # cls
             cls = cls.to(self.device)

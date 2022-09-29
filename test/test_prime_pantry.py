@@ -13,6 +13,29 @@ def test_sample_data(data_root='data/amazon_review_prime_pantry'):
 
 
 @pytest.mark.parametrize("nrows", [10])
+@pytest.mark.parametrize("max_epochs", [1])
+def test_prime_pantry_vae(
+    nrows, max_epochs,
+    data_root='data/amazon_review_prime_pantry',
+    gnd_response_json='prime_pantry_test_response.json.gz',
+):
+    from ccrec.util.demo_data import DemoData
+    item_df, tfidf_csr = get_item_df(nrows=nrows, data_root=data_root)
+    user_df = create_zero_shot(item_df).user_df
+    gnd_response = pd.read_json(
+        f'{data_root}/{gnd_response_json}', lines=True, convert_dates=False,
+    ).rename({'level_0': 'USER_ID'}, axis=1).set_index(['USER_ID', 'TEST_START_TIME'])
+    demo_data_obj = DemoData(
+        data_root=None,
+        user_df=user_df,
+        item_df=item_df,
+        expl_response=None,
+        gnd_response=gnd_response,
+        max_epochs=max_epochs)
+    return demo_data_obj.run_shap(model_main='run_vae_main')
+
+
+@pytest.mark.parametrize("nrows", [10])
 @pytest.mark.parametrize("max_epochs", [0])
 def test_prime_pantry_ccrec(
     nrows,  # None

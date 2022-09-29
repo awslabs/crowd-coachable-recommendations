@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from rime.util import indices2csr, auto_device
 from rime.dataset.base import Dataset
 from ..agent.base import Agent
-from .base import Env, create_zero_shot, parse_response, _expand_na_class
+from .base import Env, create_zero_shot, create_reranking_dataset, _expand_na_class, parse_response
 from .i2i_env import I2IEnv, I2IConfig, I2IImageEnv, ExpInfo, download_labels
 
 

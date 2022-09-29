@@ -9,7 +9,7 @@ from ccrec.models import vae_models
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 from ccrec.models.vae_lightning import VAEData
 import rime
-from ccrec.env import create_zero_shot, parse_response
+from ccrec.env import create_reranking_dataset
 from ccrec.models.item_tower import VAEItemTower
 
 
@@ -162,8 +162,7 @@ class BertMT(BertBPR):
         return self
 
 
-def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, beta=0.0,
-             user_df=None, convert_time_unit='s'):
+def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, beta=0.0, user_df=None):
     """
     item_df = get_item_df()[0]
     expl_response = pd.read_json(
@@ -173,12 +172,7 @@ def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, be
         'prime-pantry-i2i-online-baseline4-response.json', lines=True, convert_dates=False
     ).set_index('level_0')
     """
-    zero_shot = create_zero_shot(item_df, user_df=user_df)
-    train_requests = expl_response.set_index('request_time', append=True)
-    expl_events = parse_response(expl_response, convert_time_unit=convert_time_unit)
-    V = rime.dataset.Dataset(
-        zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, expl_events]),
-        test_requests=train_requests[[]], test_update_history=False, horizon=0.1, sample_with_prior=1)
+    V = create_reranking_dataset(user_df, item_df, expl_response, reranking_prior=1)
     assert V.target_csr.nnz > 0
 
     bmt = BertMT(
@@ -190,11 +184,7 @@ def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, be
     )
     bmt.fit(V)
 
-    gnd_events = parse_response(gnd_response, convert_time_unit=convert_time_unit)
-    gnd = rime.dataset.Dataset(
-        zero_shot.user_df, item_df, pd.concat([zero_shot.event_df, gnd_events]),
-        test_requests=gnd_response.set_index('request_time', append=True)[[]],
-        sample_with_prior=1e5)
+    gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
     reranking_scores = bmt.transform(gnd) + gnd.prior_score
     metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 

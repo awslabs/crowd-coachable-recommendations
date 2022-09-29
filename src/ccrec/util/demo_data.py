@@ -33,7 +33,6 @@ class DemoData:
         expl_response='expl_response.json',
         gnd_response='test_response.json',
         max_epochs=1,
-        convert_time_unit=None,
         model_cls_name='VAEPretrainedModel',
     ):
         for k, v in locals().items():
@@ -68,13 +67,13 @@ class DemoData:
     def run_bmt_main(self):
         from ccrec.models.bert_mt import bmt_main
         return bmt_main(self.item_df, self.expl_response, self.gnd_response,
-                        max_epochs=self.max_epochs, user_df=self.user_df, convert_time_unit=self.convert_time_unit)
+                        max_epochs=self.max_epochs, user_df=self.user_df)
 
     @functools.lru_cache()
     def run_bbpr_main(self):
         from ccrec.models.bbpr import bbpr_main
         return bbpr_main(self.item_df, self.expl_response, self.gnd_response,
-                         max_epochs=self.max_epochs, user_df=self.user_df, convert_time_unit=self.convert_time_unit)
+                         max_epochs=self.max_epochs, user_df=self.user_df)
 
     @torch.no_grad()
     def create_embedding(self, explainer, output_step='embedding'):
