@@ -94,7 +94,7 @@ class _DataMT(_DataModule):
 
 class BertMT(BertBPR):
     def __init__(self, item_df, batch_size=10,
-                 model_cls_name='VAEPretrainedModel', model_name='distilbert-base-uncased', max_length=30,
+                 model_cls_name='VAEPretrainedModel', model_name='distilbert-base-uncased', max_length=350,
                  max_epochs=10, max_steps=-1, do_validation=None,
                  strategy=None, query_item_position_in_user_history=0,
                  **_model_kw):
@@ -122,12 +122,12 @@ class BertMT(BertBPR):
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
         self.vae_batch_size = 6 * self.batch_size
 
-        self._ckpt_dirpath = []
-        self._logger = TensorBoardLogger('logs', "BertMT")
-        self._logger.log_hyperparams({k: v for k, v in locals().items() if k in [
-            'batch_size', 'max_epochs', 'max_steps', 'sample_with_prior', 'sample_with_posterior'
-        ]})
-        print(f'BertMT logs at {self._logger.log_dir}')
+        # self._ckpt_dirpath = []
+        # self._logger = TensorBoardLogger('logs', "BertMT")
+        # self._logger.log_hyperparams({k: v for k, v in locals().items() if k in [
+        #     'batch_size', 'max_epochs', 'max_steps', 'sample_with_prior', 'sample_with_posterior'
+        # ]})
+        # print(f'BertMT logs at {self._logger.log_dir}')
 
     def _get_data_module(self, V):
         return _DataMT(V, self.item_titles.to_frame(), self.tokenizer, self.all_inputs, self.do_validation,
@@ -141,7 +141,8 @@ class BertMT(BertBPR):
 
         dm = self._get_data_module(V)
         model.set_training_data(**dm.training_data)
-        max_epochs = int(max(5, self.max_epochs / dm.training_data['ct_cycles']))
+        # max_epochs = int(max(5, self.max_epochs / dm.training_data['ct_cycles']))
+        max_epochs = self.max_epochs
         trainer = Trainer(
             max_epochs=max_epochs, max_steps=self.max_steps,
             gpus=torch.cuda.device_count(), strategy=self.strategy,
@@ -156,8 +157,8 @@ class BertMT(BertBPR):
             os.makedirs(model._checkpoint.dirpath)
             torch.save(model.state_dict(), model._checkpoint.dirpath + '/state-dict.pth')
 
-        self._logger.experiment.add_text("ckpt", model._checkpoint.dirpath, len(self._ckpt_dirpath))
-        self._ckpt_dirpath.append(model._checkpoint.dirpath)
+        # self._logger.experiment.add_text("ckpt", model._checkpoint.dirpath, len(self._ckpt_dirpath))
+        # self._ckpt_dirpath.append(model._checkpoint.dirpath)
         self.model = model
         return self
 
@@ -179,7 +180,7 @@ def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, be
         item_df, alpha=alpha, beta=beta,
         max_epochs=max_epochs, batch_size=10 * max(1, torch.cuda.device_count()),
         sample_with_prior=True, sample_with_posterior=0,
-        replacement=False, n_negatives=5, valid_n_negatives=5,
+        replacement=False, n_negatives=3, valid_n_negatives=3,
         training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
     )
     bmt.fit(V)
