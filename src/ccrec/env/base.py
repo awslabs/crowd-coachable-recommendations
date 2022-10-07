@@ -45,7 +45,7 @@ def _sanitize_response(response):
 
 def create_reranking_dataset(user_df, item_df, response=None,
                              reranking_prior=1,  # use 1 for training and 1e5 for testing
-                             horizon=0.1, test_update_history=False,  # keep at default values
+                             horizon=0, test_update_history=False,  # keep at default values
                              ):
     """ require user_df to be indexed by USER_ID and contains _hist_items and _hist_ts columns
     use reranking_prior=1 for training and reranking_prior=1e5 for testing
@@ -57,14 +57,13 @@ def create_reranking_dataset(user_df, item_df, response=None,
     past_event_df['USER_ID'] = past_event_df.index.get_level_values(0)
     past_event_df['VALUE'] = 1  # ITEM_ID, TIMESTAMP, USER_ID
 
-    if response is not None:
+    if response is None:
+        event_df = past_event_df.reset_index(drop=True)
+        test_requests = None
+    else:
         response = _sanitize_response(response)
-
-    event_df = past_event_df.reset_index(drop=True) if response is None else \
-        pd.concat([past_event_df, parse_response(response)], ignore_index=True)
-
-    test_requests = None if response is None else \
-        pd.DataFrame(index=pd.MultiIndex.from_arrays([
+        event_df = pd.concat([past_event_df, parse_response(response)], ignore_index=True)
+        test_requests = pd.DataFrame(index=pd.MultiIndex.from_arrays([
             response.index.get_level_values(0),
             response.index.get_level_values(-1),
         ]))
@@ -72,6 +71,10 @@ def create_reranking_dataset(user_df, item_df, response=None,
     return rime.dataset.Dataset(user_df, item_df, event_df, test_requests,
                                 sample_with_prior=reranking_prior,
                                 horizon=horizon, test_update_history=test_update_history)
+
+
+def create_retrieval_dataset(user_df, item_df, response=None, reranking_prior=0, **kw):
+    return create_reranking_dataset(user_df, item_df, response=response, reranking_prior=reranking_prior, **kw)
 
 
 def _sanitize_inputs(event_df, user_df, item_df, clear_future_events=None):
@@ -116,11 +119,11 @@ class Env:
     sample_size: int = 2
     recording: bool = True
     test_requests: pd.DataFrame = None  # allow multiple requests per user when recording is off
-    item_in_test: pd.DataFrame = None
-    horizon: float = float("inf")
-    clear_future_events: bool = None
-    exclude_train: typing.Union[bool, list] = True
-    sample_with_prior: float = 0  # negative value = discourage repeats; positive value = reranking tests
+    item_in_test: pd.DataFrame = None  # a subset of item_df, e.g., containing only passages
+    horizon: float = float("inf")  # TODO: not used any more
+    clear_future_events: bool = None  # TODO: not used any more
+    exclude_train: typing.Union[bool, list] = True  # exclude query item (brand) from candidates
+    sample_with_prior: float = 0  # 1e5 to rerank top candidates; add candidates to event_df through create_reranking_dataset
     _is_synthetic: bool = True
     _sort_candidates: bool = None  # set default according to _is_synthetic
     _text_width: int = None      # set default according to _is_synthetic
