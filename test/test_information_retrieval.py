@@ -108,6 +108,6 @@ def test_information_retrieval_ccrec(
     )
 
     iexp.run(n_steps=n_steps, test_every=None, test_before_train=False)
-    print(pd.DataFrame(iexp.testing_env._reward_by_policy))
+    print(iexp.training_env.event_df)
 
     return iexp
