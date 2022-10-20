@@ -59,7 +59,8 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         return_cls: Optional[bool] = False,
         return_mean_std: Optional[bool] = False,
         return_embedding: Optional[bool] = False,
-        return_dict: Optional[bool] = None
+        return_dict: Optional[bool] = None,
+        testing: Optional[bool] = False
     ) -> Union[MaskedLMOutput, Tuple[torch.Tensor, ...]]:
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -85,9 +86,11 @@ class EmbeddingModel(DistilBertPreTrainedModel):
 
         if return_mean_std:
             return mu, std
-
-        eps = torch.randn_like(mu)
-        hidden_states = eps * std + mu
+        if testing == False:
+            eps = torch.randn_like(mu)
+            hidden_states = eps * std + mu
+        else:
+            hidden_states = mu
         
         hidden_states = self.vocab_transform(hidden_states)  # (bs, dim)
         hidden_states = self.activation(hidden_states)  # (bs, dim)

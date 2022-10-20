@@ -11,10 +11,11 @@ from ccrec.models.vae_lightning import VAEData
 import rime
 from ccrec.env import create_reranking_dataset
 from ccrec.models.item_tower import VAEItemTower
-
+from rime.util import _ReduceLRLoadCkpt
+from datasets import Dataset
 
 class _BertMT(_BertBPR):
-    def __init__(self, all_inputs, model_name='distilbert-base-uncased',
+    def __init__(self, all_inputs, tokenize_func=None, dataset=None, model_name='distilbert-base-uncased',
                  alpha=0.05, beta=2e-3,
                  n_negatives=10, valid_n_negatives=None, lr=2e-5, weight_decay=0.01,
                  training_prior_fcn=lambda x: x,
@@ -22,6 +23,7 @@ class _BertMT(_BertBPR):
                  sample_with_prior=True, sample_with_posterior=0.5,
                  pretrained_checkpoint=None,
                  model_cls_name='VAEPretrainedModel', tokenizer=None, tokenizer_kw={},
+                 freeze_bert='none',
                  ):
         super(_BertBPR, self).__init__()
         if valid_n_negatives is None:
@@ -44,22 +46,45 @@ class _BertMT(_BertBPR):
 
         self.all_inputs = all_inputs
         self.alpha = alpha
+        self.tokenize_func = tokenize_func
+        self.beta = beta
+        self.dataset = dataset
+        self.freeze_bert = freeze_bert
 
     def set_training_data(self, ct_cycles=None, ft_cycles=None, **kw):
         super().set_training_data(**kw)
-        self.ct_cycles = ct_cycles
-        self.ft_cycles = ft_cycles
+        self.ct_cycles = 1
+        self.ft_cycles = 1
+
+    def compute_kl_divergence(self, indices):
+        text = [self.all_inputs[index] for index in indices]
+        tokens = self.tokenize_func(text)
+        mu, std = self.item_tower(**tokens, output_step='return_mean_std')
+        kld_loss = -0.5 * torch.sum(1 + 2 * torch.log(std) - mu ** 2 - std ** 2, dim=1)
+        return kld_loss.mean()
 
     def training_and_validation_step(self, batch, batch_idx):
-        ijw, inputs = batch
-        ft_loss = super().training_and_validation_step(ijw, batch_idx)
-        ct_loss = self.item_tower(**inputs, output_step='dict')[0]
-        return (1 - self.alpha) / self.ct_cycles * ct_loss.mean() + \
-               self.alpha / self.ft_cycles * ft_loss.mean()
+        ft_loss, (qids_index, pids_pos_index, pids_neg_index) = super().training_and_validation_step(batch, batch_idx, return_idx=True)
+        kld_loss_query = self.compute_kl_divergence(qids_index)
+        kld_loss_pos = self.compute_kl_divergence(pids_pos_index)
+        kld_loss_neg = self.compute_kl_divergence(pids_neg_index)
+        kld_loss = (kld_loss_query + kld_loss_pos + kld_loss_neg) / 3.
+        return self.beta * kld_loss + ft_loss
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(
-            self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        if self.freeze_bert > 0:
+            for param in self.item_tower.ae_model.distilbert.parameters():
+                param.requires_grad = False
+
+        param_optimizer = list(self.named_parameters())
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': self.weight_decay},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}]
+        _optimizer_params = {'lr': self.lr}
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, **_optimizer_params)
+        lr_scheduler = _ReduceLRLoadCkpt(optimizer, model=self, factor=0.25, patience=4, verbose=True)        
+        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": lr_scheduler, "monitor": "val_loss"}}
 
     def to_explainer(self, **kw):
         return self.item_tower.to_explainer(**kw)
@@ -70,33 +95,23 @@ class _DataMT(_DataModule):
                  batch_size=None, valid_batch_size=None, vae_batch_size=None, **tokenizer_kw):
         super().__init__(rime_dataset, item_df.index, all_inputs, do_validation,
                          batch_size, valid_batch_size)
-        self._ct = VAEData(item_df, tokenizer, vae_batch_size, do_validation, **tokenizer_kw)
-        self.training_data.update({
-            'ct_cycles': max(1, self._num_batches / self._ct._num_batches),
-            'ft_cycles': max(1, self._ct._num_batches / self._num_batches),
-        })
-        print('ct_num_batches', self._ct._num_batches, 'ft_num_batches', self._num_batches,
-              'ct_cycles', self.training_data['ct_cycles'], 'ft_cycles', self.training_data['ft_cycles'])
-
     def setup(self, stage):
         super().setup(stage)
-        self._ct.setup(stage)
 
     def train_dataloader(self):
-        return CombinedLoader([super().train_dataloader(), self._ct.train_dataloader()],
-                               mode='max_size_cycle')
+        return super().train_dataloader()
 
     def val_dataloader(self):
         if self._do_validation:
-            return CombinedLoader([super().val_dataloader(), self._ct.val_dataloader()],
-                                   mode='max_size_cycle')
+            return super().val_dataloader()
 
 
 class BertMT(BertBPR):
-    def __init__(self, item_df, batch_size=10,
-                 model_cls_name='VAEPretrainedModel', model_name='distilbert-base-uncased', max_length=350,
+    def __init__(self, item_df, dataset, batch_size=10,
+                 model_cls_name='VAEPretrainedModel', model_name='distilbert-base-uncased',
+                  max_length=300,
                  max_epochs=10, max_steps=-1, do_validation=None,
-                 strategy=None, query_item_position_in_user_history=0,
+                 strategy=None, input_type='text',
                  **_model_kw):
         if do_validation is None:
             do_validation = max_epochs > 1
@@ -112,15 +127,21 @@ class BertMT(BertBPR):
         self.strategy = strategy
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer_kw = dict(padding='max_length', max_length=self.max_length, truncation=True)
-        self.all_inputs = self.tokenizer(self.item_titles.tolist(), return_tensors='pt', **self.tokenizer_kw)
-
+        self.tokenizer_kw = dict(padding='max_length', return_tensors='pt',
+                                 max_length=self.max_length, truncation=True)
+        if input_type == 'text':
+            self.all_inputs = self.item_titles.tolist()
+            self.tokenize_func = lambda x: self.tokenizer(x, **self.tokenizer_kw)
+        elif input_type == 'token':
+            self.all_inputs = self.tokenizer(self.item_titles.tolist(), **self.tokenizer_kw)
+            self.tokenize_func = None 
         self._model_kw = {**_model_kw, 'model_name': model_name, 'model_cls_name': model_cls_name,
                           'tokenizer': self.tokenizer, 'tokenizer_kw': self.tokenizer_kw}
 
         self.model = _BertMT(self.all_inputs, **self._model_kw)
         self.valid_batch_size = self.batch_size * self.model.n_negatives * 2 // self.model.valid_n_negatives
-        self.vae_batch_size = 6 * self.batch_size
+        # self.vae_batch_size = self.batch_size
+        self.dataset = dataset
 
         # self._ckpt_dirpath = []
         # self._logger = TensorBoardLogger('logs', "BertMT")
@@ -131,22 +152,22 @@ class BertMT(BertBPR):
 
     def _get_data_module(self, V):
         return _DataMT(V, self.item_titles.to_frame(), self.tokenizer, self.all_inputs, self.do_validation,
-                       self.batch_size, self.valid_batch_size, self.vae_batch_size)
+                       self.batch_size, self.valid_batch_size)
 
     @empty_cache_on_exit
     def fit(self, V=None):
         if V is None or not any([param.requires_grad for param in self.model.parameters()]):
             return self
-        model = _BertMT(self.all_inputs, **self._model_kw)
+        model = _BertMT(self.all_inputs, self.tokenize_func, self.dataset, **self._model_kw)
 
         dm = self._get_data_module(V)
         model.set_training_data(**dm.training_data)
-        # max_epochs = int(max(5, self.max_epochs / dm.training_data['ct_cycles']))
         max_epochs = self.max_epochs
         trainer = Trainer(
             max_epochs=max_epochs, max_steps=self.max_steps,
             gpus=torch.cuda.device_count(), strategy=self.strategy,
-            log_every_n_steps=1, callbacks=[model._checkpoint])
+            log_every_n_steps=1, callbacks=[model._checkpoint],
+            precision='bf16')
 
         trainer.fit(model, datamodule=dm)
         model._load_best_checkpoint("best")
@@ -159,11 +180,10 @@ class BertMT(BertBPR):
 
         # self._logger.experiment.add_text("ckpt", model._checkpoint.dirpath, len(self._ckpt_dirpath))
         # self._ckpt_dirpath.append(model._checkpoint.dirpath)
-        self.model = model
-        return self
+        # self.model = model
+        # return self
 
-
-def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, beta=0.0, user_df=None):
+def bmt_main(item_df, expl_response, gnd_response, user_df, dataset, train_kw=None):
     """
     item_df = get_item_df()[0]
     expl_response = pd.read_json(
@@ -173,20 +193,23 @@ def bmt_main(item_df, expl_response, gnd_response, max_epochs=50, alpha=0.05, be
         'prime-pantry-i2i-online-baseline4-response.json', lines=True, convert_dates=False
     ).set_index('level_0')
     """
+    _batch_size = train_kw['batch_size']
+    train_kw['batch_size'] = _batch_size * max(1, torch.cuda.device_count())
+
     V = create_reranking_dataset(user_df, item_df, expl_response, reranking_prior=1)
     assert V.target_csr.nnz > 0
 
     bmt = BertMT(
-        item_df, alpha=alpha, beta=beta,
-        max_epochs=max_epochs, batch_size=10 * max(1, torch.cuda.device_count()),
+        item_df, dataset,
         sample_with_prior=True, sample_with_posterior=0,
-        replacement=False, n_negatives=3, valid_n_negatives=3,
+        replacement=False, n_negatives=1, valid_n_negatives=1,
         training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
+        **train_kw,
     )
     bmt.fit(V)
 
-    gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
-    reranking_scores = bmt.transform(gnd) + gnd.prior_score
-    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+    # gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
+    # reranking_scores = bmt.transform(gnd) + gnd.prior_score
+    # metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 
     return metrics, reranking_scores, bmt

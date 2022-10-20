@@ -77,7 +77,7 @@ def test_prime_pantry_ccrec(
 
     if working_model is None:
         working_model = ccrec.models.bbpr.BertBPR(
-            item_df, max_epochs=max_epochs, batch_size=10 * max(1, torch.cuda.device_count()),
+            item_df, None, max_epochs=max_epochs, batch_size=10 * max(1, torch.cuda.device_count()),
             sample_with_prior=True, sample_with_posterior=0, elementwise_affine=False,
             replacement=False, n_negatives=5, valid_n_negatives=5,
             training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
@@ -124,3 +124,5 @@ def test_prime_pantry_ccrec(
     print(pd.DataFrame(iexp.testing_env._reward_by_policy))
 
     return iexp
+
+test_prime_pantry_ccrec(nrows=10, max_epochs=0)

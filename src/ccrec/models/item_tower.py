@@ -57,7 +57,7 @@ class NaiveItemTower(ItemTowerBase):
             return self.standard_layer_norm(cls)
         elif output_step == 'cls':
             return cls
-        raise NotImplementedError(f"{self.__class__.__name__} does not support {input_step}->{output_step} forward")
+        raise NotImplementedError(f"{self.__class__.__name__} does not support {input_step}->{output_step} forward")    
 
 
 class VAEItemTower(ItemTowerBase):
@@ -67,7 +67,7 @@ class VAEItemTower(ItemTowerBase):
         self.ae_model = ae_model
         self.cls_to_embedding = ae_model.cls_to_embedding
 
-    def forward(self, cls=None, text=None, input_step='inputs', output_step='embedding', **inputs):
+    def forward(self, cls=None, text=None, input_step='inputs', output_step='embedding', testing=False, **inputs):
         if input_step == 'text':
             inputs = self.text_to_inputs(text=text)
             input_step = 'inputs'
@@ -78,9 +78,11 @@ class VAEItemTower(ItemTowerBase):
                 cls = self.ae_model(**inputs, return_cls=True)
                 return cls
             if output_step == 'embedding':
-                return self.ae_model(**inputs, return_embedding=True)  # normalized embedding
+                return self.ae_model(**inputs, return_embedding=True, testing=testing)  # normalized embedding
             elif output_step == 'dict':
-                return self.ae_model(**inputs, return_dict=True)  # ct loss and logits
+                return self.ae_model(**inputs, return_dict=True, testing=testing)  # ct loss and logits
+            elif output_step == 'return_mean_std':
+                return self.ae_model(**inputs, return_mean_std=True)  # ct loss and logits
 
         elif input_step == 'cls':
             if output_step == 'embedding':
