@@ -21,7 +21,7 @@ def test_prime_pantry_vae(
 ):
     from ccrec.util.demo_data import DemoData
     item_df, tfidf_csr = get_item_df(nrows=nrows, data_root=data_root)
-    user_df = create_zero_shot(item_df).user_df
+    user_df = create_zero_shot(item_df, copy_item_id=False).user_df
     gnd_response = pd.read_json(
         f'{data_root}/{gnd_response_json}', lines=True, convert_dates=False,
     ).rename({'level_0': 'USER_ID'}, axis=1).set_index(['USER_ID', 'TEST_START_TIME'])
@@ -64,7 +64,7 @@ def test_prime_pantry_ccrec(
     """
 
     item_df, tfidf_csr = get_item_df(nrows=nrows, data_root=data_root)
-    zero_shot = create_zero_shot(item_df)
+    zero_shot = create_zero_shot(item_df, copy_item_id=False)
     user_df = zero_shot.user_df
 
     gnd_response = pd.read_json(
