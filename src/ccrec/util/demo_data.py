@@ -2,9 +2,11 @@ import pandas as pd, numpy as np, torch
 import pytest, dataclasses, functools
 from datasets import Dataset
 import scipy.sparse as sps
+import rime
 from rime.util import auto_cast_lazy_score, auto_device
 from attrdict import AttrDict
 from ccrec.env.i2i_env import Image, I2IImageEnv
+from ccrec.env.base import create_reranking_dataset, create_retrieval_dataset
 from ccrec.util import _device_mode_context
 
 
@@ -74,6 +76,23 @@ class DemoData:
         from ccrec.models.bbpr import bbpr_main
         return bbpr_main(self.item_df, self.expl_response, self.gnd_response,
                          max_epochs=self.max_epochs, user_df=self.user_df)
+
+    def run_rime(self, topk=5, device=auto_device(), model_name=None, **model_kw):
+        """ choose a model_name or run all models by default """
+        D = create_retrieval_dataset(self.user_df, self.item_df, self.gnd_response)
+        assert D.target_csr.nnz > 0, "expect nonzero holdout targets"
+        if model_name is None:
+            this = rime.Experiment(D, default_k_items_per_user=topk, default_c_users_per_item=0)
+            this.run()
+            return this.item_rec
+        else:
+            model = getattr(rime.models, model_name)(**model_kw)
+            if hasattr(model, "fit"):
+                model.fit(D.auto_regressive)
+            score = model.transform(D) + D.prior_score
+            recs = rime.metrics._assign_topk(score, topk, device=device)  # recommendations as a csr matrix
+            metrics = rime.metrics.evaluate_assigned(D.target_csr, recs, score, axis=1, device=device)
+            return metrics
 
     @torch.no_grad()
     def create_embedding(self, explainer, output_step='embedding'):
