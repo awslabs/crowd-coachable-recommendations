@@ -7,20 +7,20 @@ from rime.dataset import Dataset
 from rime.util import indices2csr, perplexity, matrix_reindex
 
 
-def create_zero_shot(item_df, self_training=False, copy_item_id=True, create_users_from=None, **kw):
-    """ example create_users_from=lambda x: x['ITEM_TYPE'] == 'query'
+def create_zero_shot(item_df, self_training=False, create_user_filter=None, **kw):
+    """ example create_user_filter=lambda x: x['ITEM_TYPE'] == 'query'
     """
-    if create_users_from is None:
-        create_users_from = item_df.index.values
-    elif hasattr(create_users_from, '__call__'):
-        create_users_from = item_df[create_users_from(item_df)].index.values
+    if create_user_filter is None:
+        create_user_id_list = item_df.index.values
+    else:
+        create_user_id_list = item_df[create_user_filter(item_df)].index.values
 
     user_df = pd.DataFrame([{
-        "USER_ID": item_id if copy_item_id else ind,
+        "USER_ID": id,
         "TEST_START_TIME": 1,
-        "_hist_items": [item_id],
+        "_hist_items": [id],
         "_hist_ts": [0],
-    } for ind, item_id in enumerate(create_users_from)
+    } for id in create_user_id_list
     ]).set_index("USER_ID")
 
     event_df = user_df["_hist_items"].explode().to_frame("ITEM_ID")
