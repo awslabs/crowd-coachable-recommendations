@@ -87,6 +87,8 @@ class SimuEnv(Env):
 def auto_env_select(*args, oracle=None, **kw):
     if oracle is None:
         cls = Env
+    elif oracle == 'dummy':
+        cls = DummyEnv
     elif isinstance(oracle, I2IConfig):
         cls = I2IImageEnv if oracle.image else I2IEnv
     elif isinstance(oracle, Dataset):
