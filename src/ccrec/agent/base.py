@@ -12,6 +12,7 @@ class Agent:
         user_conv_model='plain_average', truncated_input_steps=10, max_epochs=max_epochs,
         training_prior_fcn = lambda x: (x + 0.1 / x.shape[1]).clip(0, None).log())
     """
+
     model: object
     training: bool = False  # dropout / vae
 
