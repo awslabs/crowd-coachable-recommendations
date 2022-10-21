@@ -5,7 +5,7 @@ from rime.util import empty_cache_on_exit, LazyExpressionBase, RandScore
 
 @dataclasses.dataclass
 class Agent:
-    """ each fit of the model forgets about previous fits
+    """each fit of the model forgets about previous fits
 
     graph_conv_factory = lambda: rime.models.GraphConv(
         D, sample_with_prior=True, sample_with_posterior=0, #user_rec=False,

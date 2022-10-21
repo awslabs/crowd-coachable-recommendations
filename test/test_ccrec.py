@@ -27,7 +27,7 @@ def create_simple_dataset(sign=1):
 
 
 def create_ml_1m_interactive(**kw):
-    """ load from data/ml-1m/ratings.dat """
+    """load from data/ml-1m/ratings.dat"""
     D, _, V = rime.dataset.prepare_ml_1m_data(exclude_train=True, **kw)
     user_df = D.user_in_test
     item_df = D.item_in_test
@@ -54,7 +54,12 @@ def empirical_average_factory(D, **kw):
     return ccrec.models.EmpiricalAverageModel(D.user_df.index, D.item_df.index, **kw)
 
 
-@pytest.mark.parametrize("model_factory", [graph_conv_factory,])
+@pytest.mark.parametrize(
+    "model_factory",
+    [
+        graph_conv_factory,
+    ],
+)
 @pytest.mark.flaky(max_runs=2, min_passes=1)
 def test_oracle(model_factory):
     (user_df, item_df, event_df), D, V = create_simple_dataset()
@@ -86,7 +91,10 @@ def test_oracle(model_factory):
 @pytest.mark.flaky(max_runs=2, min_passes=1)
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda not available")
 @pytest.mark.parametrize(
-    "working_model_cls", [empirical_average_factory,]  # graph_conv_factory
+    "working_model_cls",
+    [
+        empirical_average_factory,
+    ],  # graph_conv_factory
 )
 def test_simplest(
     working_model_cls,
@@ -129,7 +137,10 @@ def test_simplest(
             "prefix": "simplest-train",
             "sample_with_prior": -10,
         },
-        {"oracle": agent.Agent(oracle_model), "prefix": "simplest-test",},
+        {
+            "oracle": agent.Agent(oracle_model),
+            "prefix": "simplest-test",
+        },
         [working_model],
         [oracle_model, baseline_model],
         epsilon=epsilon,

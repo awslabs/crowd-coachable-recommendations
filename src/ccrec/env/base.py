@@ -10,8 +10,7 @@ from rime.util import indices2csr, perplexity, matrix_reindex
 def create_zero_shot(
     item_df, self_training=False, copy_item_id=True, create_user_filter=None, **kw
 ):
-    """ example create_user_filter=lambda x: x['ITEM_TYPE'] == 'query'
-    """
+    """example create_user_filter=lambda x: x['ITEM_TYPE'] == 'query'"""
     if not copy_item_id:
         warnings.warn(
             "Changing default to use item_id as user_id in the future",
@@ -79,7 +78,7 @@ def create_reranking_dataset(
     test_update_history=False,  # keep at default values
     **kw,
 ):
-    """ require user_df to be indexed by USER_ID and contains _hist_items and _hist_ts columns
+    """require user_df to be indexed by USER_ID and contains _hist_items and _hist_ts columns
     use reranking_prior=1 for training and reranking_prior=1e5 for testing
     keep horizon and test_update_hisotory at the default values.
     use exclude_train=['ITEM_TYPE'] to separate queries and passages; see test_information_retrieval.
@@ -189,8 +188,12 @@ class Env:
     prefix: str = "ccrec-env-"
     sample_size: int = 2
     recording: bool = True
-    test_requests: pd.DataFrame = None  # allow multiple requests per user when recording is off
-    item_in_test: pd.DataFrame = None  # a subset of item_df, e.g., containing only passages
+    test_requests: pd.DataFrame = (
+        None  # allow multiple requests per user when recording is off
+    )
+    item_in_test: pd.DataFrame = (
+        None  # a subset of item_df, e.g., containing only passages
+    )
     horizon: float = float("inf")  # TODO: not used any more
     clear_future_events: bool = None  # TODO: not used any more
     exclude_train: typing.Union[
@@ -277,7 +280,7 @@ class Env:
         return self._get_step_idx() - 1
 
     def step(self, *policies):
-        """ response ('USER_ID', 'TEST_START_TIME'), ['_hist_items', 'cand_items', '_group', 'multi_label']) """
+        """response ('USER_ID', 'TEST_START_TIME'), ['_hist_items', 'cand_items', '_group', 'multi_label'])"""
         step_idx = self._get_step_idx()
         request, D = self._create_request(*policies)
         self._logger.log_metrics(

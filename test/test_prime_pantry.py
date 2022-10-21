@@ -26,7 +26,9 @@ def test_prime_pantry_vae(
     user_df = create_zero_shot(item_df, copy_item_id=False).user_df
     gnd_response = (
         pd.read_json(
-            f"{data_root}/{gnd_response_json}", lines=True, convert_dates=False,
+            f"{data_root}/{gnd_response_json}",
+            lines=True,
+            convert_dates=False,
         )
         .rename({"level_0": "USER_ID"}, axis=1)
         .set_index(["USER_ID", "TEST_START_TIME"])
@@ -76,7 +78,9 @@ def test_prime_pantry_ccrec(
 
     gnd_response = (
         pd.read_json(
-            f"{data_root}/{gnd_response_json}", lines=True, convert_dates=False,
+            f"{data_root}/{gnd_response_json}",
+            lines=True,
+            convert_dates=False,
         )
         .rename({"level_0": "USER_ID"}, axis=1)
         .set_index(["USER_ID", "TEST_START_TIME"])
@@ -119,7 +123,9 @@ def test_prime_pantry_ccrec(
     else:
         training_env_kw = {
             "oracle": env.I2IConfig(
-                image=True, role_arn=role_arn, s3_prefix=s3_prefix,
+                image=True,
+                role_arn=role_arn,
+                s3_prefix=s3_prefix,
             ),
             "prefix": "pp-i2i-train",
             "multi_label": multi_label,

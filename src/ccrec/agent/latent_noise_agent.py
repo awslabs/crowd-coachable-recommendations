@@ -19,10 +19,10 @@ class LatentNoiseAgentBase(Agent):
     batch_size: int = 1  # small batch_size => large between-query diversity
 
     def _model_transform(self, D):
-        """ return left = U and right = VT such that score = U @ VT, before adding the prior_score """
+        """return left = U and right = VT such that score = U @ VT, before adding the prior_score"""
 
     def _add_noise(self, x, num_samples=0):
-        """ return random embeddings; expand on first dimension if num_samples > 0 """
+        """return random embeddings; expand on first dimension if num_samples > 0"""
 
     def _process_batch(self, left, right, k, prior_score=None):
         left = self._add_noise(left, k)  # k,b,h

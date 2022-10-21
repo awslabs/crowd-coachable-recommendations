@@ -33,7 +33,7 @@ def _sanity_check(self):
 
 @dataclasses.dataclass
 class InteractiveExperiment:
-    """ we usually onboard InteractiveRecommendation in 3 steps:
+    """we usually onboard InteractiveRecommendation in 3 steps:
     1. oracle-train, oracle-test
     2. oracle-train, ground-truth-test (I2IConfig)
     3. ground-truth-train, ground-truth-test (I2IConfig)
@@ -56,7 +56,7 @@ class InteractiveExperiment:
         return self.working_models[0]
 
     def __post_init__(self):
-        """ set up training/testing env and training/testing/baseline agent """
+        """set up training/testing env and training/testing/baseline agent"""
         _sanity_check(self)
         if not isinstance(self.working_models, list):
             self.working_models = [self.working_models]
