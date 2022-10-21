@@ -10,8 +10,7 @@ from shap.plots._text import (
 
 
 def values_min_max(values, base_values):
-    """ Used to pick our axis limits.
-    """
+    """Used to pick our axis limits."""
     fx = base_values + values.sum()
     xmin = fx - values[values > 0].sum()
     xmax = fx - values[values < 0].sum()
@@ -38,8 +37,8 @@ def get_tokens_and_colors(
 
 
 def rainbow_text(x, y, ls, lc, width=40, nrows=4, **kw):
-    """ https://stackoverflow.com/a/9185851
-    https://stackoverflow.com/q/23696898 """
+    """https://stackoverflow.com/a/9185851
+    https://stackoverflow.com/q/23696898"""
 
     t = plt.gca().transData
     fig = plt.gcf()

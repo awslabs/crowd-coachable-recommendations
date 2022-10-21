@@ -18,7 +18,7 @@ def _pandas_read(file_name, **kw):
 
 
 class DemoData:
-    """ invoke by DemoData().run_shap()
+    """invoke by DemoData().run_shap()
     to use prime-pantry data:
         gnd_response = pd.read_json('data/amazon_review_prime_pantry/prime_pantry_test_response.json.gz',
                            lines=True, convert_dates=False).set_index('level_0')
@@ -54,7 +54,8 @@ class DemoData:
 
         if not isinstance(self.gnd_response, pd.DataFrame):
             self.gnd_response = _pandas_read(
-                f"{self.data_root}/{self.gnd_response}", convert_dates=False,
+                f"{self.data_root}/{self.gnd_response}",
+                convert_dates=False,
             ).set_index(["USER_ID"])
 
         if self.expl_response is not None and not isinstance(
@@ -120,7 +121,7 @@ class DemoData:
         return np.vstack(ds[output_step])
 
     def retrieve_similar(self, item_id, explainer, prior_score=None, topk=4):
-        """ output batch_size * topk from a list of item_ids, a model explainer, and a prior_score matrix """
+        """output batch_size * topk from a list of item_ids, a model explainer, and a prior_score matrix"""
         item_id = np.ravel(item_id)  # convert to a list if not already
         batch_size = len(item_id)
 

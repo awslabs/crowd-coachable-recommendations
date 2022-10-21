@@ -4,8 +4,8 @@ from rime.util import auto_device
 
 
 class ItemTowerBase(torch.nn.Module):
-    """ support text -> inputs -> cls -> embedding / loss;
-    tokenizer is required for text_to_inputs, to_map_fn and to_explainer for e2e inference """
+    """support text -> inputs -> cls -> embedding / loss;
+    tokenizer is required for text_to_inputs, to_map_fn and to_explainer for e2e inference"""
 
     def __init__(self, *module_list, tokenizer=None, tokenizer_kw={}):
         super().__init__()
@@ -57,7 +57,7 @@ class ItemTowerBase(torch.nn.Module):
 
 
 class NaiveItemTower(ItemTowerBase):
-    """ standard_layer_norm on top of cls token """
+    """standard_layer_norm on top of cls token"""
 
     def __init__(self, cls_model, standard_layer_norm, **kw):
         super().__init__(cls_model, standard_layer_norm, **kw)
@@ -93,7 +93,7 @@ class NaiveItemTower(ItemTowerBase):
 
 
 class VAEItemTower(ItemTowerBase):
-    """ support reconstruction of (masked) inputs as well as cls/embedding outputs """
+    """support reconstruction of (masked) inputs as well as cls/embedding outputs"""
 
     def __init__(self, ae_model, **kw):
         super().__init__(ae_model, **kw)
