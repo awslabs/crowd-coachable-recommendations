@@ -11,8 +11,11 @@ class EmpiricalAverageModel(LazyScoreModel):
 
     def fit(self, D=None):
         if D is not None:
-            V = rime.dataset.Dataset(D.user_df, D.item_df, D.event_df, sample_with_prior=1)
+            V = rime.dataset.Dataset(
+                D.user_df, D.item_df, D.event_df, sample_with_prior=1
+            )
             prior_score = auto_cast_lazy_score(V.prior_score).apply(
-                lambda x: x.clip(self.item_pseudo, None))
+                lambda x: x.clip(self.item_pseudo, None)
+            )
             self.lazy_score = auto_cast_lazy_score(V.target_csr) / prior_score
         return self

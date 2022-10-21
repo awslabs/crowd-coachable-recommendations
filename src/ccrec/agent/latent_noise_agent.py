@@ -1,7 +1,13 @@
 import dataclasses, torch, time, os, operator, typing, functools, tqdm
 import pandas as pd, numpy as np, scipy.sparse as sps
 import torch.nn.functional as F
-from rime.util import _assign_topk, auto_device, auto_cast_lazy_score, empty_cache_on_exit, RandScore
+from rime.util import (
+    _assign_topk,
+    auto_device,
+    auto_cast_lazy_score,
+    empty_cache_on_exit,
+    RandScore,
+)
 from ccrec.agent.base import Agent
 from ccrec.util import merge_unique
 from transformers import AutoTokenizer
@@ -31,14 +37,20 @@ class LatentNoiseAgentBase(Agent):
         left, right = self._model_transform(D)
         topk_indices = []
         for i in tqdm.tqdm(range(0, left.shape[0], self.batch_size)):
-            batch_left = left[i:i + self.batch_size]
-            batch_prior = D.prior_score[i:i + self.batch_size] if D.prior_score is not None else None
+            batch_left = left[i : i + self.batch_size]
+            batch_prior = (
+                D.prior_score[i : i + self.batch_size]
+                if D.prior_score is not None
+                else None
+            )
             batch_topk = self._process_batch(batch_left, right, k, batch_prior)
             topk_indices.append(batch_topk)
         topk_indices = torch.cat(topk_indices).numpy()  # q, k (draws), k (ranked)
 
         num_per_list = [1] * k
-        return np.vstack([merge_unique(lol, num_per_list, k)[0] for lol in topk_indices])
+        return np.vstack(
+            [merge_unique(lol, num_per_list, k)[0] for lol in topk_indices]
+        )
 
 
 @dataclasses.dataclass
@@ -47,13 +59,20 @@ class LatentNoiseAgent(LatentNoiseAgentBase):
 
     def _model_transform(self, D):
         S = self.model.transform(D)  # TODO: extract before layer norm
-        assert hasattr(S, "op") and S.op == operator.matmul, "only work for low-rank scores"
-        return S.children[0].as_tensor(auto_device()), S.children[1].as_tensor(auto_device())
+        assert (
+            hasattr(S, "op") and S.op == operator.matmul
+        ), "only work for low-rank scores"
+        return (
+            S.children[0].as_tensor(auto_device()),
+            S.children[1].as_tensor(auto_device()),
+        )
 
     def _add_noise(self, x, num_samples=0):
         in_shape = x.shape
         out_shape = in_shape if num_samples == 0 else [num_samples, *in_shape]
-        return F.layer_norm(x + self.std * torch.randn_like(x.expand(out_shape)), in_shape[-1:])
+        return F.layer_norm(
+            x + self.std * torch.randn_like(x.expand(out_shape)), in_shape[-1:]
+        )
 
 
 @dataclasses.dataclass
@@ -66,9 +85,9 @@ class VAEAgent(LatentNoiseAgentBase):
     def vae_model(self):
         model = self.model
         while not isinstance(model, EmbeddingModel):
-            if hasattr(model, 'model'):
+            if hasattr(model, "model"):
                 model = model.model
-            elif hasattr(model, 'item_tower'):
+            elif hasattr(model, "item_tower"):
                 model = model.item_tower
             else:
                 raise ValueError(f"not understanding {model}")
@@ -81,14 +100,22 @@ class VAEAgent(LatentNoiseAgentBase):
         mu_std = []
         for i in tqdm.tqdm(range(0, len(self.item_df), 10)):
             batch_inputs = tokenizer(
-                self.item_df.iloc[i:i + 10]['TITLE'].tolist(),
-                truncation=True, padding='max_length', max_length=self.max_length, return_tensors='pt')
-            batch_mu_std = self.vae_model(**batch_inputs.to(self.vae_model.device), return_mean_std=True)
+                self.item_df.iloc[i : i + 10]["TITLE"].tolist(),
+                truncation=True,
+                padding="max_length",
+                max_length=self.max_length,
+                return_tensors="pt",
+            )
+            batch_mu_std = self.vae_model(
+                **batch_inputs.to(self.vae_model.device), return_mean_std=True
+            )
             mu_std.append(torch.cat(batch_mu_std, -1))
         return torch.cat(mu_std)  # auto_device
 
     def _model_transform(self, D):
-        i_to_ptr = self.item_df.index.get_indexer(D.user_in_test['_hist_items'].apply(lambda x: x[0]).tolist())
+        i_to_ptr = self.item_df.index.get_indexer(
+            D.user_in_test["_hist_items"].apply(lambda x: x[0]).tolist()
+        )
         j_to_ptr = self.item_df.index.get_indexer(D.item_in_test.index.values)
         return self._cached_mu_std[i_to_ptr], self._cached_mu_std[j_to_ptr].T
 
@@ -104,5 +131,5 @@ class VAEAgent(LatentNoiseAgentBase):
     def __call__(self, D, k):
         self.vae_model.to(auto_device()).eval()
         out = super().__call__(D, k)
-        self.vae_model.to('cpu')
+        self.vae_model.to("cpu")
         return out
