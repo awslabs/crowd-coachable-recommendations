@@ -8,7 +8,7 @@ from .vae_models import VAEPretrainedModel
 
 def VAE_training(item_df,
                 training_args=None,
-                train_set_ratio = 0.95, 
+                train_set_ratio = 0.95,
                 model_checkpoint = "distilbert-base-uncased",
                 max_length=350,
                 vae_beta = 2e-3,
@@ -19,7 +19,6 @@ def VAE_training(item_df,
         return result
 
     # data pre-process
-    df = item_df["TITLE"]
     df = item_df.sample(frac=1, random_state=1).reset_index()
     df = df.drop(columns=['index'])
 
@@ -34,7 +33,7 @@ def VAE_training(item_df,
 
     ds = DatasetDict()
     ds['train'] = tds
-    ds['validation'] = vds
+    ds['test'] = vds
 
     # Tokenize the dataset
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
@@ -49,11 +48,26 @@ def VAE_training(item_df,
     model.set_beta(beta = vae_beta)
     model_name = 'msmarco_VAE_model_prime_beta_'+str(vae_beta)
 
+    if "training_args" not in dir():
+        training_args = TrainingArguments(
+            num_train_epochs = 60,
+            output_dir=f"{model_name}",
+            overwrite_output_dir=True,
+            evaluation_strategy="epoch",
+            learning_rate=2e-5,
+            weight_decay=0.01,
+            per_device_train_batch_size=batch_size,
+            per_device_eval_batch_size=batch_size,
+            push_to_hub=False,
+            fp16=True,
+            logging_steps=logging_steps,
+        )
+
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=tokenized_datasets["train"],
-        eval_dataset=tokenized_datasets["validation"],
+        eval_dataset=tokenized_datasets["test"],
         data_collator=data_collator,
     )
 
