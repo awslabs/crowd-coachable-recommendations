@@ -14,6 +14,7 @@ def VAE_training(
     model_checkpoint="distilbert-base-uncased",
     max_length=350,
     vae_beta=2e-3,
+    batch_size=64,
     callbacks=None,
 ):
     def tokenize_function(examples):
@@ -50,6 +51,7 @@ def VAE_training(
 
     # data_collator = DefaultDataCollator()
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    logging_steps = len(tokenized_datasets["train"]) // batch_size
 
     # load pre-trained model
     model = VAEPretrainedModel.from_pretrained(model_checkpoint)
