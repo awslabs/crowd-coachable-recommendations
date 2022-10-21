@@ -55,7 +55,9 @@ class BoltzmannAgent(Agent):
     min_temp: float = 0
     max_temp: float = 100
     shuffle: bool = True
-    _last_S: typing.Any = None  # store last S to quickly resample and visualize the diversity
+    _last_S: typing.Any = (
+        None  # store last S to quickly resample and visualize the diversity
+    )
     _last_temperature: list = None  # reflect the confidence of recommendation
 
     @empty_cache_on_exit

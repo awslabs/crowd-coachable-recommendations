@@ -23,7 +23,7 @@ class DummyEnv(Env):
 
 @dataclasses.dataclass
 class HoldoutEnv(Env):
-    """ get ground truth from holdout target_csr """
+    """get ground truth from holdout target_csr"""
 
     oracle: Dataset = "required"
 
@@ -50,7 +50,7 @@ class HoldoutEnv(Env):
 
 @dataclasses.dataclass
 class SimuEnv(Env):
-    """ get ground truth from the probability scores of an oracle model """
+    """get ground truth from the probability scores of an oracle model"""
 
     oracle: Agent = "required"
     soft_label: bool = True

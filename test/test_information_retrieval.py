@@ -23,9 +23,9 @@ def create_information_retrieval(item_df):
 
 
 def test_information_retrieval(item_df="data/demo_information_retrieval/item_df.csv"):
-    """ expect answer:
+    """expect answer:
     ITEM_ID            q1            q2   p1   p2   p3   p4   p5
-    USER_ID                                                     
+    USER_ID
     q1      -2.000000e+10 -1.000000e+10  0.0  0.0  0.0  0.0  0.0
     q2      -1.000000e+10 -2.000000e+10  0.0  0.0  0.0  0.0  0.0
     """
@@ -91,7 +91,9 @@ def test_information_retrieval_ccrec(
     else:
         training_env_kw = {
             "oracle": env.I2IConfig(
-                image=True, role_arn=role_arn, s3_prefix=s3_prefix,
+                image=True,
+                role_arn=role_arn,
+                s3_prefix=s3_prefix,
             ),
             "prefix": "pp-i2i-train",
             "multi_label": multi_label,
