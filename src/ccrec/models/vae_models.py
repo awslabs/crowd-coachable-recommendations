@@ -37,6 +37,16 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         if freeze_bert:
             for param in self.distilbert.parameters():
                 param.requires_grad = False
+        self._sample = 1.0
+
+    @property
+    def sample(self):
+        return self._sample
+
+    @sample.setter
+    def sample(self, sample):
+        print('setting sample=', sample)
+        self._sample = sample
 
     def generate_mean(self,hidden_states):
         raise NotImplementedError("return type: torch.Tensor")
@@ -87,7 +97,7 @@ class EmbeddingModel(DistilBertPreTrainedModel):
             return mu, std
 
         eps = torch.randn_like(mu)
-        hidden_states = eps * std + mu
+        hidden_states = eps * std * self.sample + mu
         
         hidden_states = self.vocab_transform(hidden_states)  # (bs, dim)
         hidden_states = self.activation(hidden_states)  # (bs, dim)
@@ -176,6 +186,8 @@ class VAEPretrainedModel(EmbeddingModel):
     
     def set_beta(self, beta):
         self.vae_beta = beta
+        if beta == 0:
+            self.sample = 0  # turn off sample if beta is set to zero
 
     def generate_mean(self,hidden_states):
         return self.fc_mu(hidden_states)

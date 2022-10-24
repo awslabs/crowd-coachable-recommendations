@@ -21,3 +21,7 @@ def test_bmt_main(demo_data_obj):
 
 def test_shap(demo_data_obj):
     return demo_data_obj.run_shap()
+
+
+def test_rime(demo_data_obj):
+    return demo_data_obj.run_rime(model_name='Pop')

@@ -9,7 +9,7 @@ import rime
 from rime.util import _LitValidated
 from ccrec.util import _device_mode_context
 from rime.models.zero_shot import ItemKNN
-from ccrec.env import create_reranking_dataset
+from ccrec.env import create_reranking_dataset, create_zero_shot
 from ccrec.models.item_tower import VAEItemTower
 
 
@@ -77,8 +77,9 @@ class VAEData(LightningDataModule):
                               collate_fn=self._collate_fn)
 
 
-def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
-             user_df=None, model_cls_name='VAEPretrainedModel', masked=None):
+def vae_main(item_df, gnd_response=None, max_epochs=50, beta=0, train_df=None,
+             user_df=None, model_cls_name='VAEPretrainedModel', masked=None,
+             topk=1, expl_sample=0, reranking_prior=1e5, exclude_train=True):
     """
     item_df = get_item_df()[0]  # indexed by ITEM_ID
     gnd_response = pd.read_json(
@@ -100,13 +101,16 @@ def vae_main(item_df, gnd_response, max_epochs=50, beta=0, train_df=None,
 
     ds = Dataset.from_pandas(item_df.rename({'TITLE': 'text'}, axis=1))
     with _device_mode_context(tower.model) as model, torch.no_grad():
+        tower.model.ae_model.sample = expl_sample
         ds = ds.map(model.to_map_fn('text', 'embedding'), batched=True, batch_size=64)
     item_emb = np.vstack(ds['embedding'])
-    varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
+    CT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
 
     # evaluation
-    gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
-    reranking_scores = varCT.transform(gnd) + gnd.prior_score
-    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+    gnd = create_reranking_dataset(user_df, item_df, gnd_response,
+                                   reranking_prior=reranking_prior, exclude_train=exclude_train)
+    reranking_scores = CT.transform(gnd) + gnd.prior_score
+    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, topk)
 
     return metrics, reranking_scores, tower  # tower.model.save_pretrained(save_dir)
+    # assignments = rime.metrics._assign_topk(reranking_scores, topk).indices.reshape((-1, topk))

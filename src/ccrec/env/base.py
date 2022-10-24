@@ -52,8 +52,8 @@ def _sanitize_response(response):
 
 def create_reranking_dataset(user_df, item_df, response=None,
                              reranking_prior=1,  # use 1 for training and 1e5 for testing
-                             horizon=0.1, test_update_history=False,  # keep at default values
-                             ):
+                             horizon=0, test_update_history=False,  # keep at default values
+                             **kw):
     """ require user_df to be indexed by USER_ID and contains _hist_items and _hist_ts columns
     use reranking_prior=1 for training and reranking_prior=1e5 for testing
     keep horizon and test_update_hisotory at the default values.
