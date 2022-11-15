@@ -10,7 +10,7 @@ class ItemTowerBase(torch.nn.Module):
         super().__init__()
         self.module_list = module_list
         self.tokenizer = tokenizer
-        _default_tokenizer_kw = {'truncation': True, 'padding': 'max_length', 'max_length': 32, 'return_tensors': 'pt'}
+        _default_tokenizer_kw = {'truncation': True, 'padding': 'max_length', 'max_length': 200, 'return_tensors': 'pt'}
         self.tokenizer_kw = {**_default_tokenizer_kw, **tokenizer_kw}
 
     @property

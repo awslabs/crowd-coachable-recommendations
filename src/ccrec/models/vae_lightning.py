@@ -79,7 +79,8 @@ class VAEData(LightningDataModule):
 
 def vae_main(item_df, gnd_response=None, max_epochs=50, beta=0, train_df=None,
              user_df=None, model_cls_name='VAEPretrainedModel', masked=None,
-             topk=1, expl_sample=0, reranking_prior=1e5, exclude_train=True):
+             topk=1, expl_sample=0, reranking_prior=1e5, exclude_train=True,
+             max_length=200):
     """
     item_df = get_item_df()[0]  # indexed by ITEM_ID
     gnd_response = pd.read_json(
@@ -93,7 +94,8 @@ def vae_main(item_df, gnd_response=None, max_epochs=50, beta=0, train_df=None,
 
     tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
     tower = LitVAEModel(beta, tokenizer=tokenizer, model_cls_name=model_cls_name)
-    train_dm = VAEData(train_df, tokenizer, 64 * max(1, torch.cuda.device_count()), masked=masked)
+    train_dm = VAEData(train_df, tokenizer, 64 * max(1, torch.cuda.device_count()),
+                       masked=masked, max_length=max_length)
     trainer = Trainer(max_epochs=max_epochs, gpus=torch.cuda.device_count(),
                       strategy='dp' if torch.cuda.device_count() else None,
                       log_every_n_steps=1)

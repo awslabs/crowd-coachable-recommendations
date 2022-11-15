@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt, numpy as np
 from matplotlib import transforms
 import dataclasses, typing, torch
 import shap, functools
+import os
 from shap.plots._text import (
     unpack_shap_explanation_contents,
     process_shap_values,
@@ -48,7 +49,10 @@ def rainbow_text(x, y, ls, lc, width=40, nrows=4, **kw):
             x, y, s, color=c if isinstance(c, str) else "black", transform=t, **kw
         )
         if not isinstance(c, str):
-            color = colors.red_transparent_blue(c)
+            if int(os.environ.get('DEBUG_RANDOM_COLOR', 0)):
+                color = plt.colormaps['hsv'](i / 4 % 1)
+            else:
+                color = colors.red_transparent_blue(c)
             text.set_bbox(
                 dict(facecolor=color, edgecolor="none", pad=0, boxstyle="round")
             )
@@ -80,7 +84,7 @@ class I2IExplainer:
     item_tower: typing.Callable  # cuda, eval
     tokenizer: typing.Any
     fixed_context: int = 0  # 0 yields sparser results
-    max_length: int = 128
+    max_length: int = 200
     independent_explainations: bool = False
 
     @property

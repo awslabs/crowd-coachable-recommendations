@@ -359,7 +359,7 @@ class I2IImageEnv(I2IEnv):
             ax.text(
                 0,
                 0.8,
-                "\n".join(wrap(given_text, width=100)[:3]),
+                "\n".join(wrap(given_text, width=100)[:4]),
                 fontsize=14,
                 va="center",
             )
