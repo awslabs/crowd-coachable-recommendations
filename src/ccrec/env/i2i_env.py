@@ -330,10 +330,13 @@ class I2IImageEnv(I2IEnv):
             cand_texts = summary
 
         if hasattr(self, "explainer") and self.explainer is not None:
-            (given_text,), cand_texts = (
-                self.explainer([given_text]),
-                self.explainer([given_text], cand_texts),
-            )
+            if getattr(self, "color_source", True) is True:
+                (given_text,), cand_texts = (
+                    self.explainer([given_text]),
+                    self.explainer([given_text], cand_texts),
+                )
+            else:
+                cand_texts = self.explainer([given_text], cand_texts)
 
         ax = fig.add_subplot(6, 5, 1, frameon=False, xticks=[], yticks=[])
         ax.text(0.5, 0.9, "Question:", ha="center", va="center", fontsize=20, style='italic')
@@ -355,8 +358,8 @@ class I2IImageEnv(I2IEnv):
         else:
             ax.text(
                 0,
-                0.5,
-                "\n".join(wrap(given_text, width=50)[:4]),
+                0.8,
+                "\n".join(wrap(given_text, width=100)[:3]),
                 fontsize=14,
                 va="center",
             )

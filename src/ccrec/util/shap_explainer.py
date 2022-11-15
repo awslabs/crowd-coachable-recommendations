@@ -18,7 +18,6 @@ def values_min_max(values, base_values):
     d = xmax - xmin
     xmin -= 0.1 * d
     xmax += 0.1 * d
-
     return xmin, xmax, cmax
 
 
@@ -27,26 +26,23 @@ def get_tokens_and_colors(
 ):
     # set any unset bounds
     xmin, xmax, cmax = values_min_max(shap_values.values, shap_values.base_values)
-
     values, clustering = unpack_shap_explanation_contents(shap_values)
     tokens, values, group_sizes = process_shap_values(
         shap_values.data, values, grouping_threshold, separator, clustering
     )
-
-    return tokens, 0.5 + 0.5 * values / (cmax + 1e-8)
+    # return tokens, 0.5 + 0.5 * values / (cmax + 1e-8)
+    return tokens, 0.5 + 0.5 * values.clip(min=0.0) / (cmax * 3.0 + 1e-8)
 
 
 def rainbow_text(x, y, ls, lc, width=40, nrows=4, **kw):
     """https://stackoverflow.com/a/9185851
     https://stackoverflow.com/q/23696898"""
-
     t = plt.gca().transData
     fig = plt.gcf()
     # plt.show()
     cur_words = 0
     cur_x = 0
     cur_rows = 0
-
     for i, (s, c) in enumerate(zip(ls, lc)):
         text = plt.text(
             x, y, s, color=c if isinstance(c, str) else "black", transform=t, **kw
