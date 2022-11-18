@@ -24,4 +24,4 @@ def test_shap(demo_data_obj):
 
 
 def test_rime(demo_data_obj):
-    return demo_data_obj.run_rime(model_name='Pop')
+    return demo_data_obj.run_rime(model_name="Pop")

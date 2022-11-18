@@ -11,28 +11,30 @@ from ccrec.models.vae_models import VAEPretrainedModel
 def create_information_retrieval(item_df):
     if isinstance(item_df, str):
         item_df = pd.read_csv(item_df)
-    if 'ITEM_ID' in item_df:
-        item_df = item_df.set_index('ITEM_ID')
+    if "ITEM_ID" in item_df:
+        item_df = item_df.set_index("ITEM_ID")
 
     zero_shot = create_zero_shot(
         item_df,
-        create_users_from=lambda x: x['ITEM_TYPE'] == 'query',
-        exclude_train=['ITEM_TYPE'],
+        create_users_from=lambda x: x["ITEM_TYPE"] == "query",
+        exclude_train=["ITEM_TYPE"],
     )
     return zero_shot
 
 
-def test_information_retrieval(item_df='data/demo_information_retrieval/item_df.csv'):
+def test_information_retrieval(item_df="data/demo_information_retrieval/item_df.csv"):
     zero_shot = create_information_retrieval(item_df)
-    print(pd.DataFrame(
-        zero_shot.prior_score.toarray(),
-        index=zero_shot.user_df.index,
-        columns=zero_shot.item_df.index,
-    ))
+    print(
+        pd.DataFrame(
+            zero_shot.prior_score.toarray(),
+            index=zero_shot.user_df.index,
+            columns=zero_shot.item_df.index,
+        )
+    )
 
 
 def test_information_retrieval_ccrec(
-    item_df='data/demo_information_retrieval/item_df.csv',
+    item_df="data/demo_information_retrieval/item_df.csv",
     max_epochs=0,  # choose 0 to skip retraining
     simulation=True,
     pretrained_checkpoint=None,
@@ -42,10 +44,10 @@ def test_information_retrieval_ccrec(
     s3_prefix=None,
     working_model=None,  # VAEPretrainedModel
     multi_label=False,
-    data_root='data/amazon_review_prime_pantry',
-    gnd_response_json='prime_pantry_test_response.json.gz',
+    data_root="data/amazon_review_prime_pantry",
+    gnd_response_json="prime_pantry_test_response.json.gz",
     n_steps=2,
-    exclude_train=['ITEM_TYPE'],
+    exclude_train=["ITEM_TYPE"],
 ):
     """
     * pretrained_checkpoint
@@ -64,9 +66,15 @@ def test_information_retrieval_ccrec(
 
     if working_model is None:
         working_model = ccrec.models.bbpr.BertBPR(
-            item_df, max_epochs=max_epochs, batch_size=10 * max(1, torch.cuda.device_count()),
-            sample_with_prior=True, sample_with_posterior=0, elementwise_affine=False,
-            replacement=False, n_negatives=5, valid_n_negatives=5,
+            item_df,
+            max_epochs=max_epochs,
+            batch_size=10 * max(1, torch.cuda.device_count()),
+            sample_with_prior=True,
+            sample_with_posterior=0,
+            elementwise_affine=False,
+            replacement=False,
+            n_negatives=5,
+            valid_n_negatives=5,
             training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
             pretrained_checkpoint=pretrained_checkpoint,
         )
@@ -74,37 +82,42 @@ def test_information_retrieval_ccrec(
 
     if simulation:
         training_env_kw = {
-            'oracle': ccrec.agent.Agent(tfidf_model),
-            'prefix': 'pp-simu-train',
-            'soft_label': False,
-            'reserve_score': 0.1,
-            'test_requests': train_requests,
-            'exclude_train': exclude_train,
+            "oracle": ccrec.agent.Agent(tfidf_model),
+            "prefix": "pp-simu-train",
+            "soft_label": False,
+            "reserve_score": 0.1,
+            "test_requests": train_requests,
+            "exclude_train": exclude_train,
         }
     else:
         training_env_kw = {
-            'oracle': env.I2IConfig(
+            "oracle": env.I2IConfig(
                 image=True,
                 role_arn=role_arn,
                 s3_prefix=s3_prefix,
             ),
-            'prefix': 'pp-i2i-train',
-            'multi_label': multi_label,
-            'test_requests': train_requests,
-            'exclude_train': exclude_train,
+            "prefix": "pp-i2i-train",
+            "multi_label": multi_label,
+            "test_requests": train_requests,
+            "exclude_train": exclude_train,
         }
 
     testing_env_kw = {
-        'oracle': 'dummy',
-        'prefix': 'pp-simu-test',
-        'exclude_train': exclude_train,
+        "oracle": "dummy",
+        "prefix": "pp-simu-test",
+        "exclude_train": exclude_train,
     }
     baseline_models = []  # independent test run w/o competition with other models
 
     iexp = InteractiveExperiment(
-        user_df, item_df, zero_shot.event_df,
-        training_env_kw, testing_env_kw,
-        working_model, baseline_models, epsilon,
+        user_df,
+        item_df,
+        zero_shot.event_df,
+        training_env_kw,
+        testing_env_kw,
+        working_model,
+        baseline_models,
+        epsilon,
     )
 
     iexp.run(n_steps=n_steps, test_every=None, test_before_train=False)
