@@ -5,7 +5,9 @@ from rime.util import auto_device
 
 def merge_unique(list_of_lists, num_per_list, total, rng=np.random):
     for a in list_of_lists:
-        assert len(a) >= total, f"please provide enough inputs to avoid short returns {a}"
+        assert (
+            len(a) >= total
+        ), f"please provide enough inputs to avoid short returns {a}"
 
     random_groups = rng.permutation([i for i, a in enumerate(list_of_lists) for _ in a])
     list_of_queues = [collections.deque(a) for a in list_of_lists]
@@ -16,7 +18,9 @@ def merge_unique(list_of_lists, num_per_list, total, rng=np.random):
     for i in random_groups:
         x = list_of_queues[i].popleft()
         if c[i] < num_per_list[i] and nunique < total and unique.get(x, i) == i:
-            assert x not in unique, f"duplication detected in list {i}: {list_of_lists[i]}"
+            assert (
+                x not in unique
+            ), f"duplication detected in list {i}: {list_of_lists[i]}"
             c[i] += 1
             nunique += 1
             unique[x] = i
@@ -26,7 +30,7 @@ def merge_unique(list_of_lists, num_per_list, total, rng=np.random):
 
 @contextlib.contextmanager
 def _device_mode_context(module, device=auto_device(), training=False):
-    old_device = getattr(module, "device", 'cpu')
+    old_device = getattr(module, "device", "cpu")
     old_training = module.training
     module.to(device)
     module.train() if training else module.eval()

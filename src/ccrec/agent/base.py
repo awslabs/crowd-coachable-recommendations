@@ -5,13 +5,14 @@ from rime.util import empty_cache_on_exit, LazyExpressionBase, RandScore
 
 @dataclasses.dataclass
 class Agent:
-    """ each fit of the model forgets about previous fits
+    """each fit of the model forgets about previous fits
 
     graph_conv_factory = lambda: rime.models.GraphConv(
         D, sample_with_prior=True, sample_with_posterior=0, #user_rec=False,
         user_conv_model='plain_average', truncated_input_steps=10, max_epochs=max_epochs,
         training_prior_fcn = lambda x: (x + 0.1 / x.shape[1]).clip(0, None).log())
     """
+
     model: object
     training: bool = False  # dropout / vae
 

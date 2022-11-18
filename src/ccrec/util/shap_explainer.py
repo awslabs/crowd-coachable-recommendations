@@ -49,8 +49,8 @@ def rainbow_text(x, y, ls, lc, width=40, nrows=4, **kw):
             x, y, s, color=c if isinstance(c, str) else "black", transform=t, **kw
         )
         if not isinstance(c, str):
-            if int(os.environ.get('DEBUG_RANDOM_COLOR', 0)):
-                color = plt.colormaps['hsv'](i / 4 % 1)
+            if int(os.environ.get("DEBUG_RANDOM_COLOR", 0)):
+                color = plt.colormaps["hsv"](i / 4 % 1)
             else:
                 color = colors.red_transparent_blue(c)
             text.set_bbox(
