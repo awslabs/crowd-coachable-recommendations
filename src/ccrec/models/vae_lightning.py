@@ -162,7 +162,7 @@ def vae_main(
         tower.model.ae_model.sample = expl_sample
         ds = ds.map(model.to_map_fn("text", "embedding"), batched=True, batch_size=64)
     item_emb = np.vstack(ds["embedding"])
-    CT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
+    varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
 
     # evaluation
     gnd = create_reranking_dataset(
@@ -172,7 +172,7 @@ def vae_main(
         reranking_prior=reranking_prior,
         exclude_train=exclude_train,
     )
-    reranking_scores = CT.transform(gnd) + gnd.prior_score
+    reranking_scores = varCT.transform(gnd) + gnd.prior_score
     metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, topk)
 
     return metrics, reranking_scores, tower  # tower.model.save_pretrained(save_dir)

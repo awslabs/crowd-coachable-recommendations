@@ -330,11 +330,10 @@ class I2IImageEnv(I2IEnv):
         ax = fig.add_subplot(3, 5, 1, frameon=False, xticks=[], yticks=[])
         ax.text(0.5, 0.5, "Given", ha="center", va="center", fontsize=20)
 
-        # ax = fig.add_subplot(3, 5, 2, frameon=False, xticks=[], yticks=[])
-        # _show_image(given_image, ax)
-        # ax.text(0.5, 0.5, "3 levels of government", ha="center", va="center", fontsize=20)
+        ax = fig.add_subplot(3, 5, 2, frameon=False, xticks=[], yticks=[])
+        _show_image(given_image, ax)
 
-        ax = fig.add_subplot(6, 5, (2, 5), frameon=False, xticks=[], yticks=[])
+        ax = fig.add_subplot(3, 5, (3, 5), frameon=False, xticks=[], yticks=[])
         if isinstance(given_text, shap._explanation.Explanation):
             plot_shap_values(
                 0,
@@ -390,6 +389,7 @@ class I2IImageEnv(I2IEnv):
                     fontsize=int(14 * min(4 / ncols, 1)),
                     va="center",
                 )
+
         img_data = io.BytesIO()
         fig.savefig(img_data, format="jpg", transparent=False, bbox_inches="tight")
         img_data.seek(0)
