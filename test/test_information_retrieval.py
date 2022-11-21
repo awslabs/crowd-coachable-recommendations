@@ -16,13 +16,19 @@ def create_information_retrieval(item_df):
 
     zero_shot = create_zero_shot(
         item_df,
-        create_users_from=lambda x: x["ITEM_TYPE"] == "query",
+        create_user_filter=lambda x: x["ITEM_TYPE"] == "query",
         exclude_train=["ITEM_TYPE"],
     )
     return zero_shot
 
 
 def test_information_retrieval(item_df="data/demo_information_retrieval/item_df.csv"):
+    """expect answer:
+    ITEM_ID            q1            q2   p1   p2   p3   p4   p5
+    USER_ID
+    q1      -2.000000e+10 -1.000000e+10  0.0  0.0  0.0  0.0  0.0
+    q2      -1.000000e+10 -2.000000e+10  0.0  0.0  0.0  0.0  0.0
+    """
     zero_shot = create_information_retrieval(item_df)
     print(
         pd.DataFrame(
@@ -39,25 +45,18 @@ def test_information_retrieval_ccrec(
     simulation=True,
     pretrained_checkpoint=None,
     train_requests=None,  # subsample training queries
-    epsilon=0,
+    epsilon=0,  # use 'vae' to turn on candidate sampling
     role_arn=None,
     s3_prefix=None,
     working_model=None,  # VAEPretrainedModel
     multi_label=False,
-    data_root="data/amazon_review_prime_pantry",
-    gnd_response_json="prime_pantry_test_response.json.gz",
     n_steps=2,
     exclude_train=["ITEM_TYPE"],
 ):
     """
-    * pretrained_checkpoint
-        * tf-idf-coached: lightning_logs/version_29/checkpoints/state-dict.pth
-    * VAE collection only
-        train_requests = pd.read_csv('user_unc.csv', nrows=1000).assign(
-                            TEST_START_TIME=1).set_index(['USER_ID', 'TEST_START_TIME'])[[]]
-        working_model=VAEPretrainedModel.from_pretrained('distilbert-base-uncased')
-        working_model.load_state_dict(torch.load('checkpoints/VAE_model_prime_beta_0.002_dict'))
-        epsilon='vae'
+    working_model=VAEPretrainedModel.from_pretrained('distilbert-base-uncased')
+    working_model.load_state_dict(torch.load('checkpoints/VAE_model_prime_beta_0.002_dict'))
+    epsilon='vae'
     """
 
     zero_shot = create_information_retrieval(item_df)
@@ -121,6 +120,6 @@ def test_information_retrieval_ccrec(
     )
 
     iexp.run(n_steps=n_steps, test_every=None, test_before_train=False)
-    print(pd.DataFrame(iexp.testing_env._reward_by_policy))
+    print(iexp.training_env.event_df)
 
     return iexp

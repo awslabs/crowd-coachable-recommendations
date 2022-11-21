@@ -93,8 +93,8 @@ def test_oracle(model_factory):
 @pytest.mark.parametrize(
     "working_model_cls",
     [
-        empirical_average_factory,  # graph_conv_factory
-    ],
+        empirical_average_factory,
+    ],  # graph_conv_factory
 )
 def test_simplest(
     working_model_cls,

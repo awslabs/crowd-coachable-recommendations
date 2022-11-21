@@ -8,23 +8,29 @@ from rime.util import indices2csr, perplexity, matrix_reindex
 
 
 def create_zero_shot(
-    item_df, self_training=False, copy_item_id=True, create_users_from=None, **kw
+    item_df, self_training=False, copy_item_id=True, create_user_filter=None, **kw
 ):
-    """example create_users_from=lambda x: x['ITEM_TYPE'] == 'query'"""
-    if create_users_from is None:
-        create_users_from = item_df.index.values
-    elif hasattr(create_users_from, "__call__"):
-        create_users_from = item_df[create_users_from(item_df)].index.values
+    """example create_user_filter=lambda x: x['ITEM_TYPE'] == 'query'"""
+    if not copy_item_id:
+        warnings.warn(
+            "Changing default to use item_id as user_id in the future",
+            DeprecationWarning,
+        )
+
+    if create_user_filter is None:
+        user_item_id_list = item_df.index.values
+    else:
+        user_item_id_list = item_df[create_user_filter(item_df)].index.values
 
     user_df = pd.DataFrame(
         [
             {
-                "USER_ID": item_id if copy_item_id else ind,
+                "USER_ID": item_id if copy_item_id else natural_id,
                 "TEST_START_TIME": 1,
                 "_hist_items": [item_id],
                 "_hist_ts": [0],
             }
-            for ind, item_id in enumerate(create_users_from)
+            for natural_id, item_id in enumerate(user_item_id_list)
         ]
     ).set_index("USER_ID")
 
@@ -68,7 +74,7 @@ def create_reranking_dataset(
     item_df,
     response=None,
     reranking_prior=1,  # use 1 for training and 1e5 for testing
-    horizon=0,
+    horizon=0.1,
     test_update_history=False,  # keep at default values
     **kw,
 ):

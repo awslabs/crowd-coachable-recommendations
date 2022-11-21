@@ -62,8 +62,9 @@ class LatentNoiseAgent(LatentNoiseAgentBase):
         assert (
             hasattr(S, "op") and S.op == operator.matmul
         ), "only work for low-rank scores"
-        return S.children[0].as_tensor(auto_device()), S.children[1].as_tensor(
-            auto_device()
+        return (
+            S.children[0].as_tensor(auto_device()),
+            S.children[1].as_tensor(auto_device()),
         )
 
     def _add_noise(self, x, num_samples=0):
