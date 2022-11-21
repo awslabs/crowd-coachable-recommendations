@@ -194,8 +194,6 @@ class VAEPretrainedModel(EmbeddingModel):
 
     def set_beta(self, beta):
         self.vae_beta = beta
-        if beta == 0:
-            self.sample = 0  # turn off sample if beta is set to zero
 
     def generate_mean(self, hidden_states):
         return self.fc_mu(hidden_states)
