@@ -58,7 +58,7 @@ class VAEData(LightningDataModule):
         truncation=True,
         padding="max_length",
         max_length=32,
-        **kw
+        **kw,
     ):
         super().__init__()
         self._item_df = item_df
@@ -69,7 +69,7 @@ class VAEData(LightningDataModule):
             truncation=truncation,
             padding=padding,
             max_length=max_length,
-            **kw
+            **kw,
         )
         self._collate_fn = (
             DataCollatorForLanguageModeling(tokenizer)
