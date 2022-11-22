@@ -33,7 +33,8 @@ def get_tokens_and_colors(
         shap_values.data, values, grouping_threshold, separator, clustering
     )
 
-    return tokens, 0.5 + 0.5 * values / (cmax + 1e-8)
+    # return tokens, 0.5 + 0.5 * values / (cmax + 1e-8)
+    return tokens, 0.5 + 0.5 * values.clip(min=0.) / (cmax * 3. + 1e-8)
 
 
 def rainbow_text(x, y, ls, lc, width=40, nrows=4, **kw):

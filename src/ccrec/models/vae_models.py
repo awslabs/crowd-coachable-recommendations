@@ -61,7 +61,6 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         return_mean_std: Optional[bool] = False,
         return_embedding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-        testing: Optional[bool] = False,
     ) -> Union[MaskedLMOutput, Tuple[torch.Tensor, ...]]:
 
         return_dict = (
@@ -89,18 +88,17 @@ class EmbeddingModel(DistilBertPreTrainedModel):
 
         if return_mean_std:
             return mu, std
-        if testing == False:
-            eps = torch.randn_like(mu)
-            hidden_states = eps * std + mu
-        else:
-            hidden_states = mu
+
+        eps = torch.randn_like(mu)
+        hidden_states = eps * std + mu
 
         hidden_states = self.vocab_transform(hidden_states)  # (bs, dim)
         hidden_states = self.activation(hidden_states)  # (bs, dim)
 
         # use standard_layer_norm to avoid using the weights in the trained layer_norm and keep the norm of the embedding as a constant
         if return_embedding:
-            return self.standard_layer_norm(hidden_states)
+            # return self.standard_layer_norm(hidden_states)
+            return mu
 
         prediction_logits = self.vocab_layer_norm(hidden_states)  # (bs, dim)
         prediction_logits = self.vocab_projector(prediction_logits)  # (bs, vocab_size)

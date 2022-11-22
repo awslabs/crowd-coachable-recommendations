@@ -106,7 +106,6 @@ class VAEItemTower(ItemTowerBase):
         text=None,
         input_step="inputs",
         output_step="embedding",
-        testing=False,
         **inputs,
     ):
         if input_step == "text":
@@ -120,12 +119,11 @@ class VAEItemTower(ItemTowerBase):
                 return cls
             if output_step == "embedding":
                 return self.ae_model(
-                    **inputs, return_embedding=True, testing=testing
+                    **inputs, return_embedding=True
                 )  # normalized embedding
             elif output_step == "dict":
                 return self.ae_model(
-                    **inputs, return_dict=True, testing=testing
-                )  # ct loss and logits
+                    **inputs, return_dict=True)  # ct loss and logits
             elif output_step == "return_mean_std":
                 return self.ae_model(
                     **inputs, return_mean_std=True
