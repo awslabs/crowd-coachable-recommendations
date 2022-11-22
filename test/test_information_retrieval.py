@@ -47,7 +47,7 @@ def test_information_retrieval_ccrec(
     train_requests=None,  # subsample training queries
     epsilon=0,  # use 'vae' to turn on candidate sampling
     role_arn=None,
-    s3_prefix=None,
+    s3_prefix="s3://yifeim-interns-labeling",
     working_model=None,  # VAEPretrainedModel
     multi_label=False,
     n_steps=2,
@@ -70,14 +70,15 @@ def test_information_retrieval_ccrec(
             batch_size=10 * max(1, torch.cuda.device_count()),
             sample_with_prior=True,
             sample_with_posterior=0,
-            elementwise_affine=False,
+            elementwise_affine=True,
             replacement=False,
             n_negatives=5,
             valid_n_negatives=5,
             training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
-            pretrained_checkpoint=pretrained_checkpoint,
+            pretrained_checkpoint=None,
         )
-    tfidf_model = rime.models.TF_IDF(item_df)
+    # tfidf_model = rime.models.TF_IDF(item_df)
+    tfidf_model = working_model
 
     if simulation:
         training_env_kw = {
@@ -123,3 +124,4 @@ def test_information_retrieval_ccrec(
     print(iexp.training_env.event_df)
 
     return iexp
+test_information_retrieval_ccrec()
