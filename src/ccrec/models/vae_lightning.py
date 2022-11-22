@@ -9,7 +9,7 @@ import rime
 from rime.util import _LitValidated
 from ccrec.util import _device_mode_context
 from rime.models.zero_shot import ItemKNN
-from ccrec.env import create_reranking_dataset
+from ccrec.env import create_reranking_dataset, create_zero_shot
 from ccrec.models.item_tower import VAEItemTower
 
 
@@ -58,7 +58,7 @@ class VAEData(LightningDataModule):
         truncation=True,
         padding="max_length",
         max_length=32,
-        **kw
+        **kw,
     ):
         super().__init__()
         self._item_df = item_df
@@ -69,7 +69,7 @@ class VAEData(LightningDataModule):
             truncation=truncation,
             padding=padding,
             max_length=max_length,
-            **kw
+            **kw,
         )
         self._collate_fn = (
             DataCollatorForLanguageModeling(tokenizer)
@@ -111,13 +111,19 @@ class VAEData(LightningDataModule):
 
 def vae_main(
     item_df,
-    gnd_response,
+    gnd_response=None,
     max_epochs=50,
     beta=0,
     train_df=None,
     user_df=None,
     model_cls_name="VAEPretrainedModel",
     masked=None,
+    topk=1,
+    expl_sample=0,
+    reranking_prior=1e5,
+    exclude_train=True,
+    max_length=200,
+    ckpt=None,
 ):
     """
     item_df = get_item_df()[0]  # indexed by ITEM_ID
@@ -132,26 +138,42 @@ def vae_main(
 
     tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
     tower = LitVAEModel(beta, tokenizer=tokenizer, model_cls_name=model_cls_name)
-    train_dm = VAEData(
-        train_df, tokenizer, 64 * max(1, torch.cuda.device_count()), masked=masked
-    )
-    trainer = Trainer(
-        max_epochs=max_epochs,
-        gpus=torch.cuda.device_count(),
-        strategy="dp" if torch.cuda.device_count() else None,
-        log_every_n_steps=1,
-    )
-    trainer.fit(tower, datamodule=train_dm)
+    if ckpt is not None:
+        print(f"loading from {ckpt}")
+        tower.load_state_dict(torch.load(ckpt)["state_dict"])
+    else:
+        train_dm = VAEData(
+            train_df,
+            tokenizer,
+            64 * max(1, torch.cuda.device_count()),
+            masked=masked,
+            max_length=max_length,
+        )
+        trainer = Trainer(
+            max_epochs=max_epochs,
+            gpus=torch.cuda.device_count(),
+            strategy="dp" if torch.cuda.device_count() else None,
+            log_every_n_steps=1,
+        )
+        trainer.fit(tower, datamodule=train_dm)
 
     ds = Dataset.from_pandas(item_df.rename({"TITLE": "text"}, axis=1))
     with _device_mode_context(tower.model) as model, torch.no_grad():
+        tower.model.ae_model.sample = expl_sample
         ds = ds.map(model.to_map_fn("text", "embedding"), batched=True, batch_size=64)
     item_emb = np.vstack(ds["embedding"])
     varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
 
     # evaluation
-    gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
+    gnd = create_reranking_dataset(
+        user_df,
+        item_df,
+        gnd_response,
+        reranking_prior=reranking_prior,
+        exclude_train=exclude_train,
+    )
     reranking_scores = varCT.transform(gnd) + gnd.prior_score
-    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, topk)
 
     return metrics, reranking_scores, tower  # tower.model.save_pretrained(save_dir)
+    # assignments = rime.metrics._assign_topk(reranking_scores, topk).indices.reshape((-1, topk))

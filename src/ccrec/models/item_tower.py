@@ -14,7 +14,7 @@ class ItemTowerBase(torch.nn.Module):
         _default_tokenizer_kw = {
             "truncation": True,
             "padding": "max_length",
-            "max_length": 32,
+            "max_length": 200,
             "return_tensors": "pt",
         }
         self.tokenizer_kw = {**_default_tokenizer_kw, **tokenizer_kw}
