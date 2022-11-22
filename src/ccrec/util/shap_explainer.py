@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt, numpy as np
 from matplotlib import transforms
 import dataclasses, typing, torch
 import shap, functools
+import os
 from shap.plots._text import (
     unpack_shap_explanation_contents,
     process_shap_values,
@@ -18,7 +19,6 @@ def values_min_max(values, base_values):
     d = xmax - xmin
     xmin -= 0.1 * d
     xmax += 0.1 * d
-
     return xmin, xmax, cmax
 
 
@@ -27,14 +27,12 @@ def get_tokens_and_colors(
 ):
     # set any unset bounds
     xmin, xmax, cmax = values_min_max(shap_values.values, shap_values.base_values)
-
     values, clustering = unpack_shap_explanation_contents(shap_values)
     tokens, values, group_sizes = process_shap_values(
         shap_values.data, values, grouping_threshold, separator, clustering
     )
-
     # return tokens, 0.5 + 0.5 * values / (cmax + 1e-8)
-    return tokens, 0.5 + 0.5 * values.clip(min=0.) / (cmax * 3. + 1e-8)
+    return tokens, 0.5 + 0.5 * values.clip(min=0.0) / (cmax * 3.0 + 1e-8)
 
 
 def rainbow_text(x, y, ls, lc, width=40, nrows=4, **kw):
@@ -47,13 +45,15 @@ def rainbow_text(x, y, ls, lc, width=40, nrows=4, **kw):
     cur_words = 0
     cur_x = 0
     cur_rows = 0
-
     for i, (s, c) in enumerate(zip(ls, lc)):
         text = plt.text(
             x, y, s, color=c if isinstance(c, str) else "black", transform=t, **kw
         )
         if not isinstance(c, str):
-            color = colors.red_transparent_blue(c)
+            if int(os.environ.get("DEBUG_RANDOM_COLOR", 0)):
+                color = plt.colormaps["hsv"](i / 4 % 1)
+            else:
+                color = colors.red_transparent_blue(c)
             text.set_bbox(
                 dict(facecolor=color, edgecolor="none", pad=0, boxstyle="round")
             )
@@ -85,7 +85,7 @@ class I2IExplainer:
     item_tower: typing.Callable  # cuda, eval
     tokenizer: typing.Any
     fixed_context: int = 0  # 0 yields sparser results
-    max_length: int = 128
+    max_length: int = 200
     independent_explainations: bool = False
 
     @property
