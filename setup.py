@@ -25,5 +25,6 @@ setup(
         "recurrent-intensity-model-experiments @ git+https://github.com/awslabs/recurrent-intensity-model-experiments@main",
         "pytest",
         "flaky",
+        "tensorboard",
     ],
 )
