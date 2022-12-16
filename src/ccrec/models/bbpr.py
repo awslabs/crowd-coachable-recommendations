@@ -98,12 +98,7 @@ class _BertBPR(_LitValidated):
         self.all_inputs = all_inputs
 
         if pretrained_checkpoint is not None:
-            print('Load pre-trained model ...', pretrained_checkpoint)
-            state = torch.load(pretrained_checkpoint)
-            if "state_dict" in state:
-                self.load_state_dict(state["state_dict"])
-            else:
-                self.load_state_dict(state)
+            self.load_state_dict(torch.load(pretrained_checkpoint))
 
         self.objective = "multiple_nrl"
 
@@ -241,12 +236,12 @@ class _BertBPR(_LitValidated):
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": lr_scheduler,
-                    "monitor": "val_loss",
+                    "monitor": "val_epoch_loss",
                 },
             }
         else:
-            return torch.optim.AdamW(
-                optimizer_grouped_parameters, lr=self.lr, weight_decay=self.weight_decay
+            return torch.optim.Adagrad(
+                self.parameters(), eps=1e-3, lr=self.lr, weight_decay=self.weight_decay
             )
 
     def to_explainer(self, **kw):
@@ -351,11 +346,11 @@ class BertBPR:
         )
         self.all_inputs = self.tokenizer(self.item_titles.tolist(), **self.tokenizer_kw)
         self._model_kw = {
+            "freeze_bert": freeze_bert,
             "do_validation": do_validation,
             **kw,
             "tokenizer": self.tokenizer,
             "tokenizer_kw": self.tokenizer_kw,
-            "model_name": model_name,
         }
 
         self.model = _BertBPR(self.all_inputs, **self._model_kw)
@@ -480,9 +475,7 @@ class BertBPR:
     @torch.no_grad()
     def transform(self, D):
         dm = self._get_data_module(D)
-        # score_matrix = torch.rand(len(dm.i_to_ptr), len(dm.j_to_ptr))
-
-        BATCH_SIZE_ = 512 * max(1, torch.cuda.device_count())
+        BATCH_SIZE_ = 256 * max(1, torch.cuda.device_count())
         _gpu_ids = [i for i in range(torch.cuda.device_count())]
         model_ = self.model.item_tower
         model_.eval()
@@ -569,8 +562,8 @@ def bbpr_main(
     )
     bbpr.fit(V)
 
-    # gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
-    # reranking_scores = bbpr.transform(gnd) + gnd.prior_score
-    # metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+    gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
+    reranking_scores = bbpr.transform(gnd) + gnd.prior_score
+    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 
-    # return metrics, reranking_scores, bbpr
+    return metrics, reranking_scores, bbpr

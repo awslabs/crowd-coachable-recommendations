@@ -18,6 +18,7 @@ def VAE_training(
     max_epochs=10,
     lr=2e-5,
     wd=0.01,
+    checkpoint=None,
     callbacks=None,
 ):
     def tokenize_function(examples):
@@ -55,12 +56,15 @@ def VAE_training(
     # data_collator = DefaultDataCollator()
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     logging_steps = len(tokenized_datasets["train"]) // batch_size
+    print("logging", logging_steps)
 
     # load pre-trained model
     model = VAEPretrainedModel.from_pretrained(model_checkpoint)
     model.VAE_post_init()
     model.set_beta(beta=vae_beta)
     model_name = "msmarco_VAE_model_prime_beta_" + str(vae_beta)
+    if checkpoint is not None:
+        model.load_state_dict(checkpoint)
 
     if training_args is None:
         training_args = TrainingArguments(
@@ -74,7 +78,9 @@ def VAE_training(
             per_device_eval_batch_size=batch_size,
             push_to_hub=False,
             fp16=True,
-            logging_steps=logging_steps,
+            logging_steps=1,
+            logging_strategy="epoch",
+            save_strategy="epoch",
         )
 
     trainer = Trainer(

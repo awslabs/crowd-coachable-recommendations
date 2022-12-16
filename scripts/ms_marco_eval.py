@@ -8,7 +8,7 @@ import pandas as pd
 import os
 import math
 import time
-import random
+import sys
 
 import numpy as np
 import argparse
@@ -17,6 +17,11 @@ import json
 from beir import util
 from beir.datasets.data_loader import GenericDataLoader
 import pathlib
+import inspect
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
 
 from transformers import AutoTokenizer, AutoModel
 from src.ccrec.models.vae_models import VAEPretrainedModel
@@ -32,9 +37,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--model_name", type=str, default="distilbert-base-uncased")
 parser.add_argument("--model_dir", type=str, default=None)
 parser.add_argument("--batch_size", default=512, type=int)
-parser.add_argument("--model_type", type=str, default="vaepretrainedmodel")
+parser.add_argument("--model_type", type=str, default="bertmt")
 parser.add_argument("--eval_method", type=str, default="ranking")
-parser.add_argument("--task", type=str, default="scifact")
+parser.add_argument("--task", type=str, default="msmarco")
+parser.add_argument("--save_name", type=str, default="0")
 
 
 args = parser.parse_args()
@@ -79,7 +85,10 @@ def load_data(task):
         corpus_, queries, qrels = GenericDataLoader(data_folder=data_path).load(split=data_split)
         corpus = dict()
         for pid, passage in corpus_.items():
-            corpus[pid] = passage["text"]
+            if passage["title"] == "":
+                corpus[pid] = passage["text"]
+            else:
+                corpus[pid] = passage["title"] + ": " + passage["text"]
     return corpus, queries, qrels
 
 
@@ -328,6 +337,7 @@ def main(args):
     model_dir_ = args.model_dir
     eval_method = args.eval_method
     task = args.task
+    save_name = args.save_name
 
     _gpu_ids = [i for i in range(torch.cuda.device_count())]
     if torch.cuda.device_count() > 0:
@@ -360,10 +370,6 @@ def main(args):
                 model.load_state_dict(state)
         model = model.item_tower
     elif model_type == "vaepretrainedmodel":
-        # model = VAEPretrainedModel.from_pretrained(model_name_)
-        # if state is not None:
-        #     model.load_state_dict(state)
-
         model = _BertMT(None, model_name=model_name_)
         if state is not None:
             if "state_dict" in state:
@@ -377,15 +383,10 @@ def main(args):
     model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
 
     if model_type == "automodel":
-
-        def mean_pooling(model_output, attention_mask):
-            token_embeddings = model_output.last_hidden_state
-            input_mask_expanded = (
-                attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-            )
-            return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
-                input_mask_expanded.sum(1), min=1e-9
-            )
+        def mean_pooling(token_embeddings, mask):
+            token_embeddings = token_embeddings.masked_fill(~mask[..., None].bool(), 0.)
+            sentence_embeddings = token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
+            return sentence_embeddings
 
         def transform(x):
             tokens = tokenize_func(x)
@@ -393,7 +394,7 @@ def main(args):
                 input_ids=tokens["input_ids"].cuda(),
                 attention_mask=tokens["attention_mask"].cuda(),
             )
-            outputs = mean_pooling(model_outputs, tokens["attention_mask"].cuda())
+            outputs = mean_pooling(model_outputs[0], tokens["attention_mask"].cuda())
             return outputs
 
     elif model_type == "bertbpr":
@@ -455,11 +456,7 @@ def main(args):
         else:
             NotImplementedError("NOT IMPLEMENTED!")
     
-    if model_dir_ is None:
-        torch.save(ranking_profile, "lightning_logs/{}.pt".format(model_type))
-    else:
-        model_dir_ = model_dir_.replace("/", "_")
-        torch.save(ranking_profile, "lightning_logs/{}_{}.pt".format(task, model_type))
+    torch.save(ranking_profile, "ranking_profiles/{}_{}.pt".format(task, save_name))
     time_end = time.time()
     print("Time used:", time_end - time_start)
 

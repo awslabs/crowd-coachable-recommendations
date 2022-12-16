@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 import pandas as pd, numpy as np, torch
+import inspect
+import sys
+import os
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import AutoTokenizer, AutoModel
 import pytest, rime, ccrec, ccrec.models, ccrec.models.bbpr
@@ -15,33 +23,29 @@ import pathlib
 
 import argparse
 import pandas as pd
-import os
 
 from transformers import PegasusForConditionalGeneration, PegasusTokenizer
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--batch_size_train", default=12, type=int)
-parser.add_argument("--batch_size_eval", default=512, type=int)
+parser.add_argument("--batch_size", default=12, type=int)
 parser.add_argument("--max_seq_length", default=300, type=int)
-parser.add_argument("--epochs", default=10, type=int)
+parser.add_argument("--epochs", default=0, type=int)
 parser.add_argument("--lr", default=2e-5, type=float)
 parser.add_argument("--weight_decay", default=0.01, type=float)
-parser.add_argument("--beta", default=2e-3, type=float)
-parser.add_argument("--alpha", default=0., type=float)
 parser.add_argument("--freeze_bert", default=0, type=int)
 parser.add_argument("--input_type", default="text", type=str)
 parser.add_argument("--simulation", default="simulation", type=str)
 parser.add_argument("--n_steps", default=1, type=int)
 parser.add_argument("--task", default="scifact", type=str)
-parser.add_argument("--prior_data_dir", default=None, type=str)
+parser.add_argument("--prior_data_dir",  default=None, type=str)
 parser.add_argument("--working_model_dir", default=None, type=str)
 parser.add_argument("--oracle_model_dir", default=None, type=str)
 parser.add_argument("--use_ground_truth_oracle", default=True, type=bool)
 parser.add_argument("--summarize", default=False, type=bool)
 parser.add_argument("--exp_idx", default=0, type=int)
-
+parser.add_argument("--tower_name", default="vae_tower", type=str)
 
 
 args = parser.parse_args()
@@ -63,23 +67,25 @@ def load_data(task):
         corpus[pid] = passage["text"]
     return corpus, queries, qrels
 
-def load_prior(user_df, item_df, ranking_profile):
+def load_prior(user_df, item_df, prior_data_dir):
+    ranking_profile = torch.load(prior_data_dir)
     USER_ID = user_df.index.to_list()
     request_time = [2] * len(USER_ID)
     _hist_items = [USER_ID[idx] for idx in range(len(USER_ID))]
     cand_items = []
     multi_label = []
-    num = 2
+    num_of_prior_used = 2
     for qid, cands in ranking_profile.items():
         if not qid.startswith("q"):
             qid = "q_{}".format(qid)
         pids = list(cands.keys())
         if not pids[0].startswith("p"):
             pids = ["p_{}".format(pid) for pid in pids]
-        cand_item_temp = pids[0:num]
-        multi_label_temp = [1.] * len(cand_item_temp)
-        cand_items.append(cand_item_temp)
-        multi_label.append(multi_label_temp)
+
+        cands_temp = pids[0:num_of_prior_used]
+        labels_temp = [1.] * len(cands_temp)
+        cand_items.append(cands_temp)
+        multi_label.append(labels_temp)
     expl_response = pd.DataFrame(
         {
             "USER_ID": USER_ID,
@@ -123,8 +129,7 @@ def create_information_retrieval(item_df):
 
 # %%
 def main(args):
-    _batch_size_train = args.batch_size_train
-    _batch_size_eval = args.batch_size_eval
+    _batch_size = args.batch_size
     _max_seq_length = args.max_seq_length
     _max_epochs = args.epochs
     _simulation = args.simulation
@@ -133,14 +138,13 @@ def main(args):
     _n_steps = args.n_steps
     _task = args.task
     _prior_data_dir = args.prior_data_dir
-    _beta = args.beta
-    _alpha = args.alpha
     _use_ground_truth_oracle = args.use_ground_truth_oracle
     _lr = args.lr
     _weight_decay = args.weight_decay
     _summarize = args.summarize
     exp_idx = args.exp_idx
-
+    tower_name = args.tower_name
+    
     epsilon = 0
     role_arn='arn:aws:iam::000403867413:role/TSinterns',
     s3_prefix=f"s3://yifeim-interns-labeling/{get_notebook_name()}",
@@ -153,11 +157,10 @@ def main(args):
     item_df = zero_shot.item_df
     event_df = zero_shot.event_df
 
-    if _prior_data_dir is not None:
-        prior_data = torch.load(_prior_data_dir)
-        prior_score = load_prior(user_df, item_df, prior_data)
-    else:
+    if _prior_data_dir == None:
         prior_score = None
+    else:
+        prior_score = load_prior(user_df, item_df, _prior_data_dir)        
 
     if _working_model_dir is not None:
         checkpoint_working_model = _working_model_dir
@@ -169,17 +172,28 @@ def main(args):
         "weight_decay": _weight_decay,
         "model_name": "distilbert-base-uncased",
         "max_length": _max_seq_length,
-        "freeze_bert": 0,
-        "input_step": "text",
         "pretrained_checkpoint": checkpoint_working_model,
         "do_validation": False,
+        "tower_name": tower_name,
     }
-    working_model = BertMT(item_df,
-            alpha=_alpha,
-            beta=_beta,
+    # working_model = BertMT(item_df,
+    #         alpha=_alpha,
+    #         beta=_beta,
+    #         max_epochs=_max_epochs,
+    #         batch_size=_batch_size_train * max(1, torch.cuda.device_count()),
+    #         model_cls_name="VAEPretrainedModel",
+    #         **train_kw,
+    #     )
+    working_model = ccrec.models.bbpr.BertBPR(
+            item_df,
             max_epochs=_max_epochs,
-            batch_size=_batch_size_train * max(1, torch.cuda.device_count()),
-            model_cls_name="VAEPretrainedModel",
+            batch_size=_batch_size * max(1, torch.cuda.device_count()),
+            sample_with_prior=True,
+            sample_with_posterior=0,
+            replacement=False,
+            n_negatives=5,
+            valid_n_negatives=5,
+            training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
             **train_kw,
         )
 
@@ -193,14 +207,12 @@ def main(args):
         "weight_decay": _weight_decay,
         "model_name": "distilbert-base-uncased",
         "max_length": _max_seq_length,
-        "freeze_bert": 0,
-        "input_step": "text",
         "pretrained_checkpoint": checkpoint_oracle_model,
     }
     oracle_model = ccrec.models.bbpr.BertBPR(
             item_df,
             max_epochs=_max_epochs,
-            batch_size=_batch_size_train * max(1, torch.cuda.device_count()),
+            batch_size=_batch_size * max(1, torch.cuda.device_count()),
             sample_with_prior=True,
             sample_with_posterior=0,
             replacement=False,
@@ -267,7 +279,7 @@ def main(args):
 
     iexp.run(n_steps=_n_steps, test_every=None, test_before_train=False)
     print(iexp.training_env.event_df)
-    torch.save(iexp.training_env.event_df, "lightning_logs/iexp_data_{}.pt".format(exp_idx))
+    torch.save(iexp.training_env.event_df, "exp_results/iexp_data_{}.pt".format(exp_idx))
 
 if __name__ == "__main__":
     main(args)

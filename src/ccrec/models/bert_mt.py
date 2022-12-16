@@ -24,7 +24,6 @@ from ccrec.models.vae_lightning import VAEData
 import rime
 from ccrec.env import create_reranking_dataset
 from ccrec.models.item_tower import VAEItemTower
-from rime.util import _ReduceLRLoadCkpt
 from transformers import get_linear_schedule_with_warmup
 from pytorch_lightning.callbacks import LearningRateMonitor
 
@@ -81,19 +80,23 @@ class _BertMT(_BertBPR):
             print("Load pre-trained model...")
             state = torch.load(pretrained_checkpoint)
             if "state_dict" in state:
-                self.load_state_dict(state["state_dict"])
-            else:
+                state = state["state_dict"]
+            if list(state.keys())[0].startswith("item_tower"):
+                self.load_state_dict(state)
+            elif list(state.keys())[0].startswith("distilbert"):
                 self.item_tower.ae_model.load_state_dict(state)
+            else:
+                NotImplementedError("NOT A VALID STATE DICT")
 
         self.all_inputs = all_inputs
         self.alpha = alpha
         self.objective = "multiple_nrl"
 
-    def set_training_data(self, ct_cycles=None, ft_cycles=None, num_batches=None, **kw):
+    def set_training_data(self, ct_cycles=None, ft_cycles=None, max_epochs=None, **kw):
         super().set_training_data(**kw)
         self.ct_cycles = ct_cycles
         self.ft_cycles = ft_cycles
-        self.num_batches = num_batches
+        self.max_epochs = max_epochs
 
     def training_and_validation_step(self, batch, batch_idx):
         ijw, inputs = batch
@@ -123,11 +126,8 @@ class _BertMT(_BertBPR):
         optimizer = torch.optim.AdamW(
             optimizer_grouped_parameters, lr=self.lr, weight_decay=self.weight_decay
         )
-        # lr_scheduler = _ReduceLRLoadCkpt(
-        #     optimizer, model=self, factor=0.25, patience=4, verbose=True
-        # )
         lr_scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=0, num_training_steps=int(self.num_batches)
+            optimizer, num_warmup_steps=int(self.max_epochs * 0.1), num_training_steps=int(self.max_epochs)
         )
         return {
             "optimizer": optimizer,
@@ -152,6 +152,7 @@ class _DataMT(_DataModule):
         batch_size=None,
         valid_batch_size=None,
         vae_batch_size=None,
+        max_epcohs=10,
         **tokenizer_kw,
     ):
         super().__init__(
@@ -169,7 +170,7 @@ class _DataMT(_DataModule):
             {
                 "ct_cycles": max(1, self._num_batches / self._ct._num_batches),
                 "ft_cycles": max(1, self._ct._num_batches / self._num_batches),
-                "num_batches": int(self._num_batches + self._ct._num_batches),
+                "max_epochs": max_epcohs,
             }
         )
         print(
@@ -281,6 +282,7 @@ class BertMT(BertBPR):
             self.batch_size,
             self.valid_batch_size,
             self.vae_batch_size,
+            self.max_epochs,
             max_length=self.max_length,
         )
 
