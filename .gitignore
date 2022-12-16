@@ -1,5 +1,9 @@
-data/amazon_review_prime_pantry/landingImage/
-data/amazon_review_prime_pantry/meta_Prime_Pantry.json.gz
+/Brano_data
+/lightning_logs/
+/logs/
+/.vscode
+/data
+/msmarco_VAE_model_prime_beta_0.002/
 .idea
 sftp-config.json
 *~

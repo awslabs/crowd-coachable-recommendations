@@ -47,7 +47,7 @@ class _BertBPR(_LitValidated):
     def __init__(
         self,
         all_inputs,
-        model_name="bert-base-uncased",
+        model_name="distilbert-base-uncased",
         freeze_bert=0,
         n_negatives=10,
         valid_n_negatives=None,
@@ -100,6 +100,8 @@ class _BertBPR(_LitValidated):
         if pretrained_checkpoint is not None:
             self.load_state_dict(torch.load(pretrained_checkpoint))
 
+        self.objective = "multiple_nrl"
+
     def set_training_data(
         self, i_to_ptr=None, j_to_ptr=None, prior_score=None, item_freq=None
     ):
@@ -114,6 +116,8 @@ class _BertBPR(_LitValidated):
             self.register_buffer(
                 "tr_item_proposal", torch.as_tensor(item_proposal), False
             )
+        if self.objective == "multiple_nrl":
+            self.compute_user_to_negatives()
 
     def setup(self, stage):  # auto-call in fit loop
         if stage == "fit":
@@ -136,39 +140,98 @@ class _BertBPR(_LitValidated):
         i, j, w = batch.T
         i = i.to(int)
         j = j.to(int)
-        pos_score = self._pairwise(i, j)  # bsz
+        if self.objective == "bpr":
+            pos_score = self._pairwise(i, j)  # bsz
 
-        n_negatives = self.n_negatives if self.training else self.valid_n_negatives
-        n_shape = (n_negatives, len(batch))
-        loglik = []
+            n_negatives = self.n_negatives if self.training else self.valid_n_negatives
+            n_shape = (n_negatives, len(batch))
+            loglik = []
 
-        with torch.no_grad():
-            if hasattr(self, "tr_prior_score"):
-                if hasattr(self.tr_prior_score, "as_tensor"):
-                    prior_score = self.tr_prior_score[i.tolist()].as_tensor(i.device)
+            with torch.no_grad():
+                if hasattr(self, "tr_prior_score"):
+                    if hasattr(self.tr_prior_score, "as_tensor"):
+                        prior_score = self.tr_prior_score[i.tolist()].as_tensor(
+                            i.device
+                        )
+                    else:
+                        prior_score = self.tr_prior_score.index_select(0, i).to_dense()
+                    nj = torch.multinomial(
+                        (
+                            self.training_prior_fcn(prior_score)
+                            + self.tr_item_proposal.log()
+                        ).softmax(1),
+                        n_negatives,
+                        self.replacement,
+                    ).T
                 else:
-                    prior_score = self.tr_prior_score.index_select(0, i).to_dense()
-                nj = torch.multinomial(
-                    (
-                        self.training_prior_fcn(prior_score)
-                        + self.tr_item_proposal.log()
-                    ).softmax(1),
-                    n_negatives,
-                    self.replacement,
-                ).T
-            else:
-                nj = torch.multinomial(
-                    self.tr_item_proposal, np.prod(n_shape), self.replacement
-                ).reshape(n_shape)
-        nj_score = self._pairwise(i, nj)
-        loglik.append(F.logsigmoid(pos_score - nj_score))  # nsamp * bsz
+                    nj = torch.multinomial(
+                        self.tr_item_proposal, np.prod(n_shape), self.replacement
+                    ).reshape(n_shape)
+            nj_score = self._pairwise(i, nj)
+            loglik.append(F.logsigmoid(pos_score - nj_score))  # nsamp * bsz
 
-        return (-torch.stack(loglik) * w).sum() / (len(loglik) * n_negatives * w.sum())
+            return (-torch.stack(loglik) * w).sum() / (
+                len(loglik) * n_negatives * w.sum()
+            )
+
+        elif self.objective == "multiple_nrl":
+            with torch.no_grad():
+                nj = []
+                for user in i:
+                    neg = self.user_to_negs[user.item()].pop(0)
+                    nj.append(neg)
+                    self.user_to_negs[user.item()].append(neg)
+
+            qid_emb = self.forward(self.i_to_ptr[i.ravel()]).reshape([*i.shape, -1])
+            pos_emb = self.forward(self.j_to_ptr[j.ravel()]).reshape([*j.shape, -1])
+            neg_emb = self.forward(self.j_to_ptr[nj]).reshape([*j.shape, -1])
+
+            qid_emb = torch.nn.functional.normalize(qid_emb, p=2, dim=1)
+            pos_emb = torch.nn.functional.normalize(pos_emb, p=2, dim=1)
+            neg_emb = torch.nn.functional.normalize(neg_emb, p=2, dim=1)
+            pos_socres = torch.mm(qid_emb, pos_emb.transpose(0, 1))
+            neg_scores = torch.mm(qid_emb, neg_emb.transpose(0, 1))
+            labels = torch.tensor(
+                range(len(pos_socres)), dtype=torch.long, device=pos_socres.device
+            )
+            scores = torch.cat((pos_socres, neg_scores), dim=1) * 20.0
+            loss = torch.nn.CrossEntropyLoss()(scores, labels)
+
+            return loss
+
+    def compute_user_to_negatives(self):
+        self.user_to_negs = dict()
+        all_indices = self.tr_prior_score._indices()
+        all_values = self.tr_prior_score._values()
+        for step in range(len(all_values)):
+            index = all_indices[:, step]
+            user_id = index[0].item()
+            neg = index[1].item()
+            if user_id not in self.user_to_negs:
+                self.user_to_negs[user_id] = []
+            if all_values[step] >= 1.0:
+                self.user_to_negs[user_id].append(neg)
 
     def configure_optimizers(self):
+        param_optimizer = list(self.named_parameters())
+        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
+        optimizer_grouped_parameters = [
+            {
+                "params": [
+                    p for n, p in param_optimizer if not any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": self.weight_decay,
+            },
+            {
+                "params": [
+                    p for n, p in param_optimizer if any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+            },
+        ]
         if self.do_validation:
-            optimizer = torch.optim.Adagrad(
-                self.parameters(), eps=1e-3, lr=self.lr, weight_decay=self.weight_decay
+            optimizer = torch.optim.AdamW(
+                optimizer_grouped_parameters, lr=self.lr, weight_decay=self.weight_decay
             )
             lr_scheduler = _ReduceLRLoadCkpt(
                 optimizer, model=self, factor=0.25, patience=4, verbose=True
@@ -287,6 +350,7 @@ class BertBPR:
         )
         self.all_inputs = self.tokenizer(self.item_titles.tolist(), **self.tokenizer_kw)
         self._model_kw = {
+            "model_name": model_name,
             "freeze_bert": freeze_bert,
             "do_validation": do_validation,
             **kw,
@@ -352,6 +416,7 @@ class BertBPR:
             strategy=self.strategy,
             log_every_n_steps=1,
             callbacks=[model._checkpoint, LearningRateMonitor()],
+            precision="bf16" if torch.cuda.is_available() else 32,
         )
 
         if self._model_kw["freeze_bert"] > 0:  # cache all_cls
@@ -384,14 +449,89 @@ class BertBPR:
         self.model = model
         return self
 
+    def get_all_embeddings(self, model, batch_size, output_step="embedding"):
+        all_texts = self.item_titles.tolist()
+        num = len(all_texts)
+        num_batches = int(np.ceil(num / batch_size))
+        embeddings_all = torch.zeros(num, 768)
+        with torch.no_grad():
+            for step in range(num_batches):
+                if (step % 100) == 0:
+                    print("Processing", step, "|", num_batches)
+                text_batch = all_texts[step * batch_size : (step + 1) * batch_size]
+                tokens = self.tokenizer(text_batch, **self.tokenizer_kw)
+                if output_step == "embedding":
+                    embedding_batch = model(**tokens, output_step="embedding")
+                elif output_step == "mean":
+                    embedding_batch, _ = model(**tokens, output_step="return_mean_std")
+                embeddings_all[
+                    step * batch_size : (step * batch_size + len(text_batch)), :
+                ] = embedding_batch.cpu()
+        return embeddings_all
+
+    def cos_sim(self, a: torch.Tensor, b: torch.Tensor):
+        if len(a.shape) == 1:
+            a = a.unsqueeze(0)
+        if len(b.shape) == 1:
+            b = b.unsqueeze(0)
+        a_norm = torch.nn.functional.normalize(a, p=2, dim=1)
+        b_norm = torch.nn.functional.normalize(b, p=2, dim=1)
+        return torch.mm(a_norm, b_norm.transpose(0, 1))
+
     @empty_cache_on_exit
     @torch.no_grad()
     def transform(self, D):
         dm = self._get_data_module(D)
-        all_emb = self._transform_item_corpus(self.model.item_tower, "embedding")
-        user_final = all_emb[dm.i_to_ptr]
-        item_final = all_emb[dm.j_to_ptr]
-        return auto_cast_lazy_score(user_final) @ item_final.T
+        BATCH_SIZE_ = 256 * max(1, torch.cuda.device_count())
+        _gpu_ids = [i for i in range(torch.cuda.device_count())]
+        model_ = self.model.item_tower
+        model_.eval()
+        model_ = torch.nn.DataParallel(model_, device_ids=_gpu_ids)
+        if len(_gpu_ids) != 0:
+            model_ = model_.cuda(_gpu_ids[0])
+        num_of_users = len(dm.i_to_ptr)
+        num_of_items = len(dm.j_to_ptr)
+        score_matrix = torch.zeros(num_of_users, num_of_items)
+        num_user_batches = int(np.ceil(num_of_users / BATCH_SIZE_))
+        num_item_batches = int(np.ceil(num_of_items / BATCH_SIZE_))
+        if hasattr(self, "oracle_dir"):
+            qrels = self.oracle_dir
+            item_to_ptr_list = self.item_titles.index.to_list()
+            for step, user_index in enumerate(dm.i_to_ptr):
+                qid = item_to_ptr_list[user_index].split("_")[-1]
+                pids = list(qrels[qid])
+                pids = ["p_{}".format(pid) for pid in pids]
+                pid_indices = [item_to_ptr_list.index(pid) for pid in pids]
+                score_matrix[step, pid_indices] += 1.0
+
+        elif hasattr(self, "random"):
+            score_matrix = torch.rand_like(score_matrix)
+
+        elif hasattr(self.model.item_tower, "cls_model") or hasattr(
+            self.model.item_tower, "ae_model"
+        ):
+            if hasattr(self.model.item_tower, "cls_model"):
+                all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "embedding")
+            elif hasattr(self.model.item_tower, "ae_model"):
+                all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "mean")
+            user_embedding = all_emb[dm.i_to_ptr]
+            user_embedding = user_embedding.to(auto_device())
+            for step_p in range(num_item_batches):
+                item_ids = dm.j_to_ptr[
+                    step_p * BATCH_SIZE_ : (step_p + 1) * BATCH_SIZE_
+                ]
+                item_embeddings_batch = all_emb[item_ids]
+                item_embeddings_batch = item_embeddings_batch.to(auto_device())
+                num_of_items = item_embeddings_batch.shape[0]
+                scores = self.cos_sim(user_embedding, item_embeddings_batch)
+                scores = scores.cpu()
+                score_matrix[
+                    :, step_p * BATCH_SIZE_ : (step_p * BATCH_SIZE_ + num_of_items)
+                ] = scores
+
+        else:
+            NotImplementedError("NOT IMPLEMENTED!")
+        return auto_cast_lazy_score(score_matrix)
 
     def to_explainer(self, **kw):
         return self.model.to_explainer(**kw)
@@ -402,9 +542,11 @@ def bbpr_main(
     expl_response,
     gnd_response,
     max_epochs=50,
+    batch_size=10 * max(1, torch.cuda.device_count()),
     alpha=0.05,
     beta=0.0,
     user_df=None,
+    train_kw={},
 ):
     """
     item_df = get_item_df()[0]
@@ -421,13 +563,14 @@ def bbpr_main(
     bbpr = BertBPR(
         item_df,
         max_epochs=max_epochs,
-        batch_size=10 * max(1, torch.cuda.device_count()),
+        batch_size=batch_size,
         sample_with_prior=True,
         sample_with_posterior=0,
         replacement=False,
         n_negatives=5,
         valid_n_negatives=5,
         training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
+        **train_kw,
     )
     bbpr.fit(V)
 

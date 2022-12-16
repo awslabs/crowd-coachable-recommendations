@@ -206,6 +206,7 @@ class Env:
     _text_ellipsis: bool = None  # set default according to _is_synthetic
     _start_step_idx: int = 0
     _minimum_wait_time: float = 0.1
+    summarizer: list = None
 
     def __post_init__(self):
         self.name = "{}-{}-{}".format(self.prefix, len(self.user_df), len(self.item_df))
@@ -230,7 +231,11 @@ class Env:
             self.event_df, self.user_df, self.item_df, self.clear_future_events
         )
 
+        self.reranking_prior_scores = None
         if self.test_requests is None:
+            self.test_requests = self.user_df.set_index("TEST_START_TIME", append=True)
+        elif isinstance(self.test_requests, Dataset):
+            self.reranking_prior_scores = self.test_requests
             self.test_requests = self.user_df.set_index("TEST_START_TIME", append=True)
 
         if self.item_in_test is None:
@@ -279,7 +284,7 @@ class Env:
     def _last_step_idx(self):
         return self._get_step_idx() - 1
 
-    def step(self, *policies):
+    def step(self, *policies, explainer=None):
         """response ('USER_ID', 'TEST_START_TIME'), ['_hist_items', 'cand_items', '_group', 'multi_label'])"""
         step_idx = self._get_step_idx()
         request, D = self._create_request(*policies)
@@ -287,6 +292,8 @@ class Env:
             {"request_ppl": _get_request_perplexity(request)}, step_idx
         )
 
+        if explainer is not None:
+            self.explainer = explainer
         response = self._invoke(request, D, step_idx)
         self._response[step_idx] = response
 
@@ -318,6 +325,8 @@ class Env:
         else:
             test_requests = self.test_requests
         D = self._create_testing_dataset(test_requests=test_requests)
+        if self.reranking_prior_scores is not None:
+            D.prior_score = D.prior_score + self.reranking_prior_scores.prior_score
 
         sample_size = (
             self.sample_size

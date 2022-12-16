@@ -10,11 +10,15 @@ from .vae_models import VAEPretrainedModel
 def VAE_training(
     item_df,
     training_args=None,
-    train_set_ratio=0.95,
+    train_set_ratio=0.9,
     model_checkpoint="distilbert-base-uncased",
-    max_length=350,
+    max_length=300,
     vae_beta=2e-3,
     batch_size=64,
+    max_epochs=10,
+    lr=2e-5,
+    wd=0.01,
+    checkpoint=None,
     callbacks=None,
 ):
     def tokenize_function(examples):
@@ -28,7 +32,7 @@ def VAE_training(
 
     # data pre-process
     df = item_df.sample(frac=1, random_state=1).reset_index()
-    df = df.drop(columns=["index"])
+    # df = df.drop(columns=["ITEM_ID"])
 
     size = len(df.index)
     df_train = df.iloc[: int(train_set_ratio * size)]
@@ -52,26 +56,31 @@ def VAE_training(
     # data_collator = DefaultDataCollator()
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     logging_steps = len(tokenized_datasets["train"]) // batch_size
+    print("logging", logging_steps)
 
     # load pre-trained model
     model = VAEPretrainedModel.from_pretrained(model_checkpoint)
     model.VAE_post_init()
     model.set_beta(beta=vae_beta)
     model_name = "msmarco_VAE_model_prime_beta_" + str(vae_beta)
+    if checkpoint is not None:
+        model.load_state_dict(checkpoint)
 
-    if "training_args" not in dir():
+    if training_args is None:
         training_args = TrainingArguments(
-            num_train_epochs=60,
+            num_train_epochs=max_epochs,
             output_dir=f"{model_name}",
             overwrite_output_dir=True,
             evaluation_strategy="epoch",
-            learning_rate=2e-5,
-            weight_decay=0.01,
+            learning_rate=lr,
+            weight_decay=wd,
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size,
             push_to_hub=False,
             fp16=True,
-            logging_steps=logging_steps,
+            logging_steps=1,
+            logging_strategy="epoch",
+            save_strategy="epoch",
         )
 
     trainer = Trainer(
