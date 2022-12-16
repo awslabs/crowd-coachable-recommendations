@@ -10,13 +10,13 @@ class BM25(object):
         self.k1 = k1
 
     def fit(self, X):
-        """ Fit IDF to documents X """
+        """Fit IDF to documents X"""
         self.vectorizer.fit(X)
         y = super(TfidfVectorizer, self.vectorizer).transform(X)
         self.avdl = y.sum(1).mean()
 
     def transform(self, q, X):
-        """ Calculate BM25 between query q and documents X """
+        """Calculate BM25 between query q and documents X"""
         b, k1, avdl = self.b, self.k1, self.avdl
 
         # apply CountVectorizer

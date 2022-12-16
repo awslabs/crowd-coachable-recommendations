@@ -68,9 +68,7 @@ class _BertMT(_BertBPR):
             setattr(self, name, getattr(self.hparams, name))
         self.training_prior_fcn = training_prior_fcn
 
-        vae_model = getattr(vae_models, model_cls_name).from_pretrained(
-            model_name
-        )
+        vae_model = getattr(vae_models, model_cls_name).from_pretrained(model_name)
         if hasattr(vae_model, "set_beta"):
             vae_model.set_beta(beta)
         self.item_tower = VAEItemTower(
@@ -127,7 +125,9 @@ class _BertMT(_BertBPR):
             optimizer_grouped_parameters, lr=self.lr, weight_decay=self.weight_decay
         )
         lr_scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=int(self.max_epochs * 0.1), num_training_steps=int(self.max_epochs)
+            optimizer,
+            num_warmup_steps=int(self.max_epochs * 0.1),
+            num_training_steps=int(self.max_epochs),
         )
         return {
             "optimizer": optimizer,
@@ -201,6 +201,7 @@ class _DataMT(_DataModule):
                 mode="max_size_cycle",
             )
 
+
 class BertMT(BertBPR):
     def __init__(
         self,
@@ -236,10 +237,8 @@ class BertMT(BertBPR):
             max_length=self.max_length,
             truncation=True,
         )
-        self.all_inputs = self.tokenizer(
-            self.item_titles.tolist(), **self.tokenizer_kw
-        )
-        
+        self.all_inputs = self.tokenizer(self.item_titles.tolist(), **self.tokenizer_kw)
+
         self._model_kw = {
             **_model_kw,
             "model_name": model_name,
@@ -323,19 +322,20 @@ class BertMT(BertBPR):
         )
         self._ckpt_dirpath.append(model._checkpoint.dirpath)
         self.model = model
-        return 
+        return
 
 
 def bmt_main(
-    item_df, 
-    expl_response, 
-    gnd_response, 
+    item_df,
+    expl_response,
+    gnd_response,
     max_epochs=50,
     batch_size=None,
     alpha=0.05,
     beta=0.0,
-    user_df=None, 
-    train_kw=None):
+    user_df=None,
+    train_kw=None,
+):
     """
     item_df = get_item_df()[0]
     expl_response = pd.read_json(

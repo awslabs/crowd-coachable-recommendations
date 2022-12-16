@@ -122,8 +122,7 @@ class VAEItemTower(ItemTowerBase):
                     **inputs, return_embedding=True
                 )  # normalized embedding
             elif output_step == "dict":
-                return self.ae_model(
-                    **inputs, return_dict=True)  # ct loss and logits
+                return self.ae_model(**inputs, return_dict=True)  # ct loss and logits
             elif output_step == "return_mean_std":
                 return self.ae_model(
                     **inputs, return_mean_std=True

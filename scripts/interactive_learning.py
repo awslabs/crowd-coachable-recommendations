@@ -39,7 +39,7 @@ parser.add_argument("--input_type", default="text", type=str)
 parser.add_argument("--simulation", default="simulation", type=str)
 parser.add_argument("--n_steps", default=1, type=int)
 parser.add_argument("--task", default="scifact", type=str)
-parser.add_argument("--prior_data_dir",  default=None, type=str)
+parser.add_argument("--prior_data_dir", default=None, type=str)
 parser.add_argument("--working_model_dir", default=None, type=str)
 parser.add_argument("--oracle_model_dir", default=None, type=str)
 parser.add_argument("--use_ground_truth_oracle", default=True, type=bool)
@@ -54,18 +54,25 @@ args = parser.parse_args()
 # load MS_MARCO data
 def load_data(task):
     data_name = task
-    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(data_name)
-    out_dir = os.path.join(pathlib.Path("./data/scifact/").parent.absolute(), "datasets")
+    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(
+        data_name
+    )
+    out_dir = os.path.join(
+        pathlib.Path("./data/scifact/").parent.absolute(), "datasets"
+    )
     data_path = util.download_and_unzip(url, out_dir)
     if data_name == "msmarco":
         data_split = "dev"
     else:
         data_split = "test"
-    corpus_, queries, qrels = GenericDataLoader(data_folder=data_path).load(split=data_split)
+    corpus_, queries, qrels = GenericDataLoader(data_folder=data_path).load(
+        split=data_split
+    )
     corpus = dict()
     for pid, passage in corpus_.items():
         corpus[pid] = passage["text"]
     return corpus, queries, qrels
+
 
 def load_prior(user_df, item_df, prior_data_dir):
     ranking_profile = torch.load(prior_data_dir)
@@ -83,7 +90,7 @@ def load_prior(user_df, item_df, prior_data_dir):
             pids = ["p_{}".format(pid) for pid in pids]
 
         cands_temp = pids[0:num_of_prior_used]
-        labels_temp = [1.] * len(cands_temp)
+        labels_temp = [1.0] * len(cands_temp)
         cand_items.append(cands_temp)
         multi_label.append(labels_temp)
     expl_response = pd.DataFrame(
@@ -96,22 +103,26 @@ def load_prior(user_df, item_df, prior_data_dir):
         }
     )
     expl_response = expl_response.set_index("USER_ID")
-    V = create_reranking_dataset(user_df, item_df, expl_response, reranking_prior=100.)
+    V = create_reranking_dataset(user_df, item_df, expl_response, reranking_prior=100.0)
     return V
+
 
 def get_item_df(task="msmarco"):
     corpus, queries, qrels = load_data(task)
     corpus_df = pd.DataFrame.from_dict({"pid": corpus.keys(), "TITLE": corpus.values()})
-    queries_df = pd.DataFrame.from_dict({"qid": queries.keys(), "TITLE": queries.values()})
+    queries_df = pd.DataFrame.from_dict(
+        {"qid": queries.keys(), "TITLE": queries.values()}
+    )
     queries_df.loc[:, "qid"] = queries_df["qid"].apply(lambda x: "q_{}".format(x))
     corpus_df.loc[:, "pid"] = corpus_df["pid"].apply(lambda x: "p_{}".format(x))
-    queries_df.rename(columns = {'qid':'ITEM_ID'}, inplace = True)
-    corpus_df.rename(columns = {'pid':'ITEM_ID'}, inplace = True)
+    queries_df.rename(columns={"qid": "ITEM_ID"}, inplace=True)
+    corpus_df.rename(columns={"pid": "ITEM_ID"}, inplace=True)
     queries_df["ITEM_TYPE"] = ["query"] * len(queries_df)
     corpus_df["ITEM_TYPE"] = ["passage"] * len(corpus_df)
     item_df = pd.concat([queries_df, corpus_df])
     item_df = item_df.assign(landingImage=None)
     return item_df, qrels
+
 
 def create_information_retrieval(item_df):
     if isinstance(item_df, str):
@@ -144,13 +155,13 @@ def main(args):
     _summarize = args.summarize
     exp_idx = args.exp_idx
     tower_name = args.tower_name
-    
+
     epsilon = 0
-    role_arn='arn:aws:iam::000403867413:role/TSinterns',
-    s3_prefix=f"s3://yifeim-interns-labeling/{get_notebook_name()}",
+    role_arn = ("arn:aws:iam::000403867413:role/TSinterns",)
+    s3_prefix = (f"s3://yifeim-interns-labeling/{get_notebook_name()}",)
     multi_label = False
-    exclude_train=["ITEM_TYPE"]
-    
+    exclude_train = ["ITEM_TYPE"]
+
     item_df, qrels = get_item_df(_task)
     zero_shot = create_information_retrieval(item_df)
     user_df = zero_shot.user_df
@@ -160,7 +171,7 @@ def main(args):
     if _prior_data_dir == None:
         prior_score = None
     else:
-        prior_score = load_prior(user_df, item_df, _prior_data_dir)        
+        prior_score = load_prior(user_df, item_df, _prior_data_dir)
 
     if _working_model_dir is not None:
         checkpoint_working_model = _working_model_dir
@@ -185,17 +196,17 @@ def main(args):
     #         **train_kw,
     #     )
     working_model = ccrec.models.bbpr.BertBPR(
-            item_df,
-            max_epochs=_max_epochs,
-            batch_size=_batch_size * max(1, torch.cuda.device_count()),
-            sample_with_prior=True,
-            sample_with_posterior=0,
-            replacement=False,
-            n_negatives=5,
-            valid_n_negatives=5,
-            training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
-            **train_kw,
-        )
+        item_df,
+        max_epochs=_max_epochs,
+        batch_size=_batch_size * max(1, torch.cuda.device_count()),
+        sample_with_prior=True,
+        sample_with_posterior=0,
+        replacement=False,
+        n_negatives=5,
+        valid_n_negatives=5,
+        training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
+        **train_kw,
+    )
 
     if _oracle_model_dir is not None:
         checkpoint_oracle_model = _oracle_model_dir
@@ -210,17 +221,17 @@ def main(args):
         "pretrained_checkpoint": checkpoint_oracle_model,
     }
     oracle_model = ccrec.models.bbpr.BertBPR(
-            item_df,
-            max_epochs=_max_epochs,
-            batch_size=_batch_size * max(1, torch.cuda.device_count()),
-            sample_with_prior=True,
-            sample_with_posterior=0,
-            replacement=False,
-            n_negatives=5,
-            valid_n_negatives=5,
-            training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
-            **oracle_kw,
-        )
+        item_df,
+        max_epochs=_max_epochs,
+        batch_size=_batch_size * max(1, torch.cuda.device_count()),
+        sample_with_prior=True,
+        sample_with_posterior=0,
+        replacement=False,
+        n_negatives=5,
+        valid_n_negatives=5,
+        training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
+        **oracle_kw,
+    )
     if _use_ground_truth_oracle:
         oracle_model.oracle_dir = qrels
 
@@ -234,7 +245,7 @@ def main(args):
         summarizer = None
 
     if _simulation == "simulation":
-        print('Oracle model as SOTA model')
+        print("Oracle model as SOTA model")
         training_env_kw = {
             "oracle": ccrec.agent.Agent(oracle_model),
             "prefix": "pp-simu-train",
@@ -245,25 +256,25 @@ def main(args):
             "summarizer": summarizer,
         }
     elif _simulation == "human":
-        print('Experiment with human feedback')
+        print("Experiment with human feedback")
         training_env_kw = {
-                "oracle": env.I2IConfig(
-                    image=True,
-                    role_arn=role_arn,
-                    s3_prefix=s3_prefix,
-                ),
-                "prefix": "pp-i2i-train",
-                "multi_label": multi_label,
-                "test_requests": prior_score,
-                "exclude_train": exclude_train,
-                "summarizer": summarizer,
-            }
+            "oracle": env.I2IConfig(
+                image=True,
+                role_arn=role_arn,
+                s3_prefix=s3_prefix,
+            ),
+            "prefix": "pp-i2i-train",
+            "multi_label": multi_label,
+            "test_requests": prior_score,
+            "exclude_train": exclude_train,
+            "summarizer": summarizer,
+        }
 
     testing_env_kw = {
-            "oracle": "dummy",
-            "prefix": "pp-simu-test",
-            "exclude_train": exclude_train,
-        }
+        "oracle": "dummy",
+        "prefix": "pp-simu-test",
+        "exclude_train": exclude_train,
+    }
     baseline_models = []  # independent test run w/o competition with other models
 
     iexp = InteractiveExperiment(
@@ -279,7 +290,10 @@ def main(args):
 
     iexp.run(n_steps=_n_steps, test_every=None, test_before_train=False)
     print(iexp.training_env.event_df)
-    torch.save(iexp.training_env.event_df, "exp_results/iexp_data_{}.pt".format(exp_idx))
+    torch.save(
+        iexp.training_env.event_df, "exp_results/iexp_data_{}.pt".format(exp_idx)
+    )
+
 
 if __name__ == "__main__":
     main(args)

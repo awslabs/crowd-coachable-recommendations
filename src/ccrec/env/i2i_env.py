@@ -132,9 +132,13 @@ class I2IEnv(Env):
 
         if self.prompt is None:
             if self.multi_label:
-                self.prompt = "Please pick ALL items that are similar to the given item."
+                self.prompt = (
+                    "Please pick ALL items that are similar to the given item."
+                )
             else:
-                self.prompt = "Please pick ONE item that is most similar to the given item."
+                self.prompt = (
+                    "Please pick ONE item that is most similar to the given item."
+                )
 
     def _invoke(self, request, D, step_idx):
         exp_info = self._get_exp_info(step_idx)
@@ -323,9 +327,13 @@ class I2IImageEnv(I2IEnv):
             device = "cuda" if torch.cuda.is_available() else "cpu"
             summary = []
             for text in cand_texts:
-                batch = self.summarizer[0]([text], truncation=True, padding="longest", return_tensors="pt").to(device)
+                batch = self.summarizer[0](
+                    [text], truncation=True, padding="longest", return_tensors="pt"
+                ).to(device)
                 translated = self.summarizer[1].generate(**batch)
-                tgt_text = self.summarizer[0].batch_decode(translated, skip_special_tokens=True)
+                tgt_text = self.summarizer[0].batch_decode(
+                    translated, skip_special_tokens=True
+                )
                 summary.append(tgt_text[0])
             cand_texts = summary
 
@@ -336,7 +344,9 @@ class I2IImageEnv(I2IEnv):
             )
 
         ax = fig.add_subplot(6, 5, 1, frameon=False, xticks=[], yticks=[])
-        ax.text(0.5, 0.9, "Question:", ha="center", va="center", fontsize=20, style='italic')
+        ax.text(
+            0.5, 0.9, "Question:", ha="center", va="center", fontsize=20, style="italic"
+        )
 
         # ax = fig.add_subplot(3, 5, 2, frameon=False, xticks=[], yticks=[])
         # _show_image(given_image, ax)
@@ -370,7 +380,7 @@ class I2IImageEnv(I2IEnv):
             fontsize=18,
             ha="left",
             va="center",
-            style='italic',
+            style="italic",
         )
 
         for i, (image, text) in enumerate(zip(cand_images, cand_texts)):
@@ -381,12 +391,19 @@ class I2IImageEnv(I2IEnv):
                 _show_image(image, ax)
 
             ax = fig.add_subplot(
-                6, 5, (i+1)*5+1, frameon=False, xticks=[], yticks=[]
+                6, 5, (i + 1) * 5 + 1, frameon=False, xticks=[], yticks=[]
             )
-            ax.text(0., 0.75, "({})".format(i+1), ha="left", va="center", fontsize=16)
-            ax.text(0., 1.2, "."*250, ha="left", va="center", fontsize=12)
+            ax.text(
+                0.0, 0.75, "({})".format(i + 1), ha="left", va="center", fontsize=16
+            )
+            ax.text(0.0, 1.2, "." * 250, ha="left", va="center", fontsize=12)
             ax = fig.add_subplot(
-                6, 5, ((i+1)*5+2, (i+1)*5+5), frameon=False, xticks=[], yticks=[]
+                6,
+                5,
+                ((i + 1) * 5 + 2, (i + 1) * 5 + 5),
+                frameon=False,
+                xticks=[],
+                yticks=[],
             )
             if isinstance(text, shap._explanation.Explanation):
                 plot_shap_values(
@@ -405,9 +422,7 @@ class I2IImageEnv(I2IEnv):
                     fontsize=int(14 * min(4 / ncols, 1)),
                     va="center",
                 )
-        ax = fig.add_subplot(
-                6, 5, 26, frameon=False, xticks=[], yticks=[]
-            )
+        ax = fig.add_subplot(6, 5, 26, frameon=False, xticks=[], yticks=[])
         # ax.text(0., 0.75, "(5)", ha="left", va="center", fontsize=16)
         # ax.text(0., 1.2, "."*250, ha="left", va="center", fontsize=12)
         # ax = fig.add_subplot(
@@ -441,7 +456,9 @@ class I2IImageEnv(I2IEnv):
                     )
                 )
         else:
-            images = list(map(self.image_format, tqdm.tqdm(request.to_dict(orient="records"))))
+            images = list(
+                map(self.image_format, tqdm.tqdm(request.to_dict(orient="records")))
+            )
         Image.open(images[0]).show()
 
         if self.explainer is None:
@@ -451,7 +468,12 @@ class I2IImageEnv(I2IEnv):
                     enumerate(images),
                 )
         else:
-            list(map(functools.partial(self._upload_image, exp_info=exp_info), enumerate(images)))
+            list(
+                map(
+                    functools.partial(self._upload_image, exp_info=exp_info),
+                    enumerate(images),
+                )
+            )
         request = request.assign(
             **{
                 "source-ref": [

@@ -38,7 +38,7 @@ parser.add_argument("--model_name", type=str, default="distilbert-base-uncased")
 parser.add_argument("--epochs", default=10, type=int)
 parser.add_argument("--lr", default=2e-5, type=float)
 parser.add_argument("--beta", default=2e-3, type=float)
-parser.add_argument("--alpha", default=1., type=float)
+parser.add_argument("--alpha", default=1.0, type=float)
 parser.add_argument("--training_method", default="bertmt", type=str)
 parser.add_argument("--dataset", default="msmarco", type=str)
 parser.add_argument("--checkpoint", default=None, type=str)
@@ -52,14 +52,20 @@ args = parser.parse_args()
 # load MS_MARCO data
 def load_data(task):
     data_name = task
-    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(data_name)
-    out_dir = os.path.join(pathlib.Path("./data/scifact/").parent.absolute(), "datasets")
+    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(
+        data_name
+    )
+    out_dir = os.path.join(
+        pathlib.Path("./data/scifact/").parent.absolute(), "datasets"
+    )
     data_path = util.download_and_unzip(url, out_dir)
     if data_name == "msmarco":
         data_split = "dev"
     else:
         data_split = "test"
-    corpus_, queries, qrels = GenericDataLoader(data_folder=data_path).load(split=data_split)
+    corpus_, queries, qrels = GenericDataLoader(data_folder=data_path).load(
+        split=data_split
+    )
     corpus = dict()
     for pid, passage in corpus_.items():
         if passage["title"] == "":
@@ -67,6 +73,7 @@ def load_data(task):
         else:
             corpus[pid] = passage["title"] + ": " + passage["text"]
     return corpus, queries
+
 
 def load_corpus():
     data_dir = "./data/ms_marco/collection.tsv"
@@ -78,7 +85,10 @@ def load_corpus():
 
 def load_query():
     dataframe_train = pd.read_csv(
-        "./data/ms_marco/queries.train.tsv", sep="\t", header=None, names=["qid", "query"]
+        "./data/ms_marco/queries.train.tsv",
+        sep="\t",
+        header=None,
+        names=["qid", "query"],
     )
     dataframe_dev = pd.read_csv(
         "./data/ms_marco/queries.dev.tsv", sep="\t", header=None, names=["qid", "query"]
@@ -206,14 +216,20 @@ def load_expl_response(dataset):
 
 
 def load_item_df_unsupervised_learning(data_name):
-    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(data_name)
-    out_dir = os.path.join(pathlib.Path("./data/scifact/").parent.absolute(), "datasets")
+    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(
+        data_name
+    )
+    out_dir = os.path.join(
+        pathlib.Path("./data/scifact/").parent.absolute(), "datasets"
+    )
     data_path = util.download_and_unzip(url, out_dir)
     if data_name == "msmarco":
         data_split = "dev"
     else:
         data_split = "test"
-    corpus, queries, qrels = GenericDataLoader(data_folder=data_path).load(split=data_split)
+    corpus, queries, qrels = GenericDataLoader(data_folder=data_path).load(
+        split=data_split
+    )
     query_title = [queries[qid] for qid in queries]
     corpus_title = []
     for pid, text in corpus.items():
@@ -299,7 +315,7 @@ def main(opt):
             train_kw=training_arguments,
         )
     else:
-        item_df = item_df['TITLE']
+        item_df = item_df["TITLE"]
         pre_trained_model = torch.load(_checkpoint)
         VAE_training(
             item_df,
@@ -312,6 +328,7 @@ def main(opt):
             callbacks=None,
             checkpoint=pre_trained_model,
         )
+
 
 if __name__ == "__main__":
     main(args)

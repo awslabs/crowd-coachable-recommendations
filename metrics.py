@@ -3,6 +3,7 @@ from collections import Counter
 
 MaxMRRRank = 100
 
+
 def convert_dev_data_to_msmarco(data):
     writing_dir = os.path.join("data/ms_marco", "eval", "dev_data.tsv")
     with open(writing_dir, "w") as w:
@@ -141,8 +142,8 @@ def compute_metrics_from_files(
         qids_to_relevant_passageids, qids_to_ranked_candidate_passages
     )
 
+
 def compute_MRR_score(ranking_profile, qrels):
     path_to_reference = convert_dev_data_to_msmarco(qrels)
     path_to_candidate = convert_ranking_to_msmarco(ranking_profile)
     return compute_metrics_from_files(path_to_reference, path_to_candidate)
-    

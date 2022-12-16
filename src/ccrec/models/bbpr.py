@@ -150,7 +150,9 @@ class _BertBPR(_LitValidated):
             with torch.no_grad():
                 if hasattr(self, "tr_prior_score"):
                     if hasattr(self.tr_prior_score, "as_tensor"):
-                        prior_score = self.tr_prior_score[i.tolist()].as_tensor(i.device)
+                        prior_score = self.tr_prior_score[i.tolist()].as_tensor(
+                            i.device
+                        )
                     else:
                         prior_score = self.tr_prior_score.index_select(0, i).to_dense()
                     nj = torch.multinomial(
@@ -168,7 +170,9 @@ class _BertBPR(_LitValidated):
             nj_score = self._pairwise(i, nj)
             loglik.append(F.logsigmoid(pos_score - nj_score))  # nsamp * bsz
 
-            return (-torch.stack(loglik) * w).sum() / (len(loglik) * n_negatives * w.sum())
+            return (-torch.stack(loglik) * w).sum() / (
+                len(loglik) * n_negatives * w.sum()
+            )
 
         elif self.objective == "multiple_nrl":
             with torch.no_grad():
@@ -205,7 +209,7 @@ class _BertBPR(_LitValidated):
             neg = index[1].item()
             if user_id not in self.user_to_negs:
                 self.user_to_negs[user_id] = []
-            if all_values[step] >= 1.:
+            if all_values[step] >= 1.0:
                 self.user_to_negs[user_id].append(neg)
 
     def configure_optimizers(self):
@@ -453,13 +457,15 @@ class BertBPR:
             for step in range(num_batches):
                 if (step % 100) == 0:
                     print("Processing", step, "|", num_batches)
-                text_batch = all_texts[step*batch_size : (step+1)*batch_size]
+                text_batch = all_texts[step * batch_size : (step + 1) * batch_size]
                 tokens = self.tokenizer(text_batch, **self.tokenizer_kw)
                 if output_step == "embedding":
                     embedding_batch = model(**tokens, output_step="embedding")
                 elif output_step == "mean":
                     embedding_batch, _ = model(**tokens, output_step="return_mean_std")
-                embeddings_all[step * batch_size : (step * batch_size + len(text_batch)), :] = embedding_batch.cpu()
+                embeddings_all[
+                    step * batch_size : (step * batch_size + len(text_batch)), :
+                ] = embedding_batch.cpu()
         return embeddings_all
 
     def cos_sim(self, a: torch.Tensor, b: torch.Tensor):
@@ -495,12 +501,14 @@ class BertBPR:
                 pids = list(qrels[qid])
                 pids = ["p_{}".format(pid) for pid in pids]
                 pid_indices = [item_to_ptr_list.index(pid) for pid in pids]
-                score_matrix[step, pid_indices] += 1.
+                score_matrix[step, pid_indices] += 1.0
 
         elif hasattr(self, "random"):
             score_matrix = torch.rand_like(score_matrix)
 
-        elif hasattr(self.model.item_tower, "cls_model") or hasattr(self.model.item_tower, "ae_model"):
+        elif hasattr(self.model.item_tower, "cls_model") or hasattr(
+            self.model.item_tower, "ae_model"
+        ):
             if hasattr(self.model.item_tower, "cls_model"):
                 all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "embedding")
             elif hasattr(self.model.item_tower, "ae_model"):
@@ -516,7 +524,9 @@ class BertBPR:
                 num_of_items = item_embeddings_batch.shape[0]
                 scores = self.cos_sim(user_embedding, item_embeddings_batch)
                 scores = scores.cpu()
-                score_matrix[:, step_p * BATCH_SIZE_ : (step_p * BATCH_SIZE_ + num_of_items)] = scores
+                score_matrix[
+                    :, step_p * BATCH_SIZE_ : (step_p * BATCH_SIZE_ + num_of_items)
+                ] = scores
 
         else:
             NotImplementedError("NOT IMPLEMENTED!")
@@ -524,6 +534,7 @@ class BertBPR:
 
     def to_explainer(self, **kw):
         return self.model.to_explainer(**kw)
+
 
 def bbpr_main(
     item_df,

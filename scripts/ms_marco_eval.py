@@ -51,38 +51,70 @@ print("Using device:", device)
 # %%
 def load_data(task):
     if task == "ms_marco_full_ranking":
-        corpus = pd.read_csv("data/ms_marco/collection.tsv", sep="\t", header=None, names=["pid", "passage"])
+        corpus = pd.read_csv(
+            "data/ms_marco/collection.tsv",
+            sep="\t",
+            header=None,
+            names=["pid", "passage"],
+        )
         corpus = dict(zip(corpus["pid"], corpus["passage"]))
         queries = pd.read_csv(
-            "data/ms_marco/queries.dev.tsv", sep="\t", header=None, names=["qid", "query"]
+            "data/ms_marco/queries.dev.tsv",
+            sep="\t",
+            header=None,
+            names=["qid", "query"],
         )
         queries = dict(zip(queries["qid"], queries["query"]))
         qrels = pd.read_csv(
-            "data/ms_marco/qrels.dev.tsv", sep="\t", header=None, usecols=[0, 2], names=["qid", "pid"]
+            "data/ms_marco/qrels.dev.tsv",
+            sep="\t",
+            header=None,
+            usecols=[0, 2],
+            names=["qid", "pid"],
         )
         qrels = qrels.groupby("qid")["pid"].apply(list).to_dict()
-    elif task == "ms_marco_find_hard_negatives" or task == "ms_marco_find_hard_negatives_for_devs":
-        corpus = pd.read_csv("data/ms_marco/collection.tsv", sep="\t", header=None, names=["pid", "passage"])
+    elif (
+        task == "ms_marco_find_hard_negatives"
+        or task == "ms_marco_find_hard_negatives_for_devs"
+    ):
+        corpus = pd.read_csv(
+            "data/ms_marco/collection.tsv",
+            sep="\t",
+            header=None,
+            names=["pid", "passage"],
+        )
         corpus = dict(zip(corpus["pid"], corpus["passage"]))
         queries_train = pd.read_csv(
-            "data/ms_marco/queries.train.tsv", sep="\t", header=None, names=["qid", "query"]
+            "data/ms_marco/queries.train.tsv",
+            sep="\t",
+            header=None,
+            names=["qid", "query"],
         )
         queries_dev = pd.read_csv(
-            "data/ms_marco/queries.dev.tsv", sep="\t", header=None, names=["qid", "query"]
+            "data/ms_marco/queries.dev.tsv",
+            sep="\t",
+            header=None,
+            names=["qid", "query"],
         )
         queries = pd.concat([queries_train, queries_dev], ignore_index=True)
         queries = dict(zip(queries["qid"], queries["query"]))
         qrels = None
     else:
         data_name = task
-        url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(data_name)
-        out_dir = os.path.join(pathlib.Path("./data/scifact/").parent.absolute(), "datasets")
+        url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(
+            data_name
+        )
+        out_dir = os.path.join(
+            pathlib.Path("./data/scifact/").parent.absolute(), "datasets"
+        )
         data_path = util.download_and_unzip(url, out_dir)
         if data_name == "msmarco":
             data_split = "dev"
         else:
             data_split = "test"
-        corpus_, queries, qrels = GenericDataLoader(data_folder=data_path).load(split=data_split)
+        corpus_, queries, qrels = GenericDataLoader(data_folder=data_path).load(
+            split=data_split
+        )
         corpus = dict()
         for pid, passage in corpus_.items():
             if passage["title"] == "":
@@ -174,7 +206,9 @@ def ranking(corpus, queries, embedding_func, batch_size):
         passage_embeddings_batch = passage_embeddings_batch.cuda()
         num_of_pasg = passage_embeddings_batch.shape[0]
         scores = cos_sim(queries_embeddings, passage_embeddings_batch)
-        ranking_matrix[0:num_queries, step * batch_size : (step * batch_size + num_of_pasg)] = scores.cpu()
+        ranking_matrix[
+            0:num_queries, step * batch_size : (step * batch_size + num_of_pasg)
+        ] = scores.cpu()
     for step, qid in enumerate(queries_ids):
         # print(step, "|", num_queries)
         scores = ranking_matrix[step]
@@ -291,7 +325,9 @@ def extract_hard_negatives(
             neg_pids = [neg_pids[index] for index in ids_ordered]
             neg_pids = neg_pids[0:save_top]
             train_dataset[qid] = {"pos_pid": pos_pids, "neg_pid": neg_pids}
-        torch.save(train_dataset, "data/ms_marco/train_dataset_{}.pt".format(model_name))
+        torch.save(
+            train_dataset, "data/ms_marco/train_dataset_{}.pt".format(model_name)
+        )
     else:
         train_dataset = {}
         num_queries, num_passages = len(devs), len(corpus)
@@ -316,7 +352,8 @@ def extract_hard_negatives(
                 scores = cos_sim(queries_embeddings_batch, passage_embeddings_batch)
                 scores = scores.cpu()
                 ranking_matrix[
-                    0:num_of_rows, step_p * batch_size : (step_p * batch_size + num_of_cols)
+                    0:num_of_rows,
+                    step_p * batch_size : (step_p * batch_size + num_of_cols),
                 ] = scores
             for idx, qid in enumerate(qids):
                 score_array = ranking_matrix[idx]
@@ -328,6 +365,7 @@ def extract_hard_negatives(
                     neg_pids.remove(pos_pid)
                 train_dataset[qid] = {"pos_pid": [pos_pid], "neg_pid": neg_pids}
         torch.save(train_dataset, "data/ms_marco/dev_dataset_{}.pt".format(model_name))
+
 
 # %%
 def main(args):
@@ -383,9 +421,14 @@ def main(args):
     model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
 
     if model_type == "automodel":
+
         def mean_pooling(token_embeddings, mask):
-            token_embeddings = token_embeddings.masked_fill(~mask[..., None].bool(), 0.)
-            sentence_embeddings = token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
+            token_embeddings = token_embeddings.masked_fill(
+                ~mask[..., None].bool(), 0.0
+            )
+            sentence_embeddings = (
+                token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
+            )
             return sentence_embeddings
 
         def transform(x):
@@ -435,19 +478,19 @@ def main(args):
                 embedding_func, corpus, queries, model_type, batch_size, qrels
             )
         elif "ranking" in eval_method:
-            if eval_method == 'ranking':
-                ranking_profile = ranking(
-                    corpus, queries, embedding_func, batch_size
-                )
+            if eval_method == "ranking":
+                ranking_profile = ranking(corpus, queries, embedding_func, batch_size)
             elif eval_method == "ranking_bm25":
-                ranking_profile = ranking_bm25(
-                    corpus, queries
-                )
+                ranking_profile = ranking_bm25(corpus, queries)
             evaluator = EvaluateRetrieval(None)
-            mrr = evaluator.evaluate_custom(qrels, ranking_profile, [1, 5, 10, 100], metric="mrr")
+            mrr = evaluator.evaluate_custom(
+                qrels, ranking_profile, [1, 5, 10, 100], metric="mrr"
+            )
             for name, value in mrr.items():
                 print("{}".format(name), ":", value)
-            ndcg, _map, recall, precision = evaluator.evaluate(qrels, ranking_profile, [1, 5, 10, 100])
+            ndcg, _map, recall, precision = evaluator.evaluate(
+                qrels, ranking_profile, [1, 5, 10, 100]
+            )
             results = [ndcg, _map, recall, precision]
             for res in results:
                 print("................................")
@@ -455,7 +498,7 @@ def main(args):
                     print("{}".format(name), ":", value)
         else:
             NotImplementedError("NOT IMPLEMENTED!")
-    
+
     torch.save(ranking_profile, "ranking_profiles/{}_{}.pt".format(task, save_name))
     time_end = time.time()
     print("Time used:", time_end - time_start)

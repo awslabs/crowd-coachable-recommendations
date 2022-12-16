@@ -82,7 +82,7 @@ class SimuEnv(Env):
             label = torch.argmax(probs, 1).ravel()
             multi_label = F.one_hot(label, probs.shape[1]).cpu().numpy()
             return multi_label
-            
+
         if self.soft_label:
             probs = (probs / probs.sum(1, keepdims=True)).cpu().numpy()
             multi_label = np.round(probs, 1)

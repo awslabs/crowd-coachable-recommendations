@@ -23,7 +23,7 @@ import random
 # '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 # input ranking_profile from our model and ranking_profile from bm-25
 # this part generates query -> [passage-1, passage-2, passage-3, passage-4]
-# where passage-1 and passage-2 are from our vae model, 
+# where passage-1 and passage-2 are from our vae model,
 # passage-3 and passage-4 are from bm-25
 # this part makes 2 outputs:
 # 1: request.csv --> query: [passage-1, passage-2, passage-3, passage-4]
@@ -39,7 +39,7 @@ import random
 # def filter_string(text):
 #     new_text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
 #     return new_text
-    
+
 # qids_all = list(qrels.keys())
 # qids_all = qids_all[0:500]
 # header = ['query', 'passage-1', 'passage-2', 'passage-3', 'passage-4']
@@ -49,38 +49,38 @@ import random
 # for qid in ranking_profile:
 #     if qid not in qids_all:
 #         continue
-    
+
 #     ranks = list(ranking_profile[qid].keys())
 #     ranks_bm25 = list(ranking_profile_bm25[qid].keys())
-    
+
 #     cands = ranks[0:2]
 #     for pid in ranks_bm25:
 #         if len(cands) == 4:
 #             break
 #         if pid not in cands:
 #             cands.append(pid)
-    
+
 #     query_text = queries[qid]
 #     passages = [filter_string(corpus[pid]["text"]) for pid in cands]
-    
+
 #     row = [query_text, *passages]
 #     rows.append(row)
 #     id_track[query_text] = "q_{}".format(qid)
 #     for pid, passage in zip(cands, passages):
 #         id_track[passage] = "p_{}".format(pid)
-    
+
 # save_dir = os.path.join("scripts", "hotpotqa_results_human_agent", "data_iteration_0")
 # if not os.path.exists(save_dir):
 #     os.mkdir(save_dir)
 # task_name = "request.csv"
 # filename = os.path.join(save_dir, task_name)
-# # writing to csv file 
-# with open(filename, 'w', newline='', encoding='utf-8') as csvfile: 
-#     # creating a csv writer object 
-#     csvwriter = csv.writer(csvfile) 
-#     # writing the fields 
+# # writing to csv file
+# with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+#     # creating a csv writer object
+#     csvwriter = csv.writer(csvfile)
+#     # writing the fields
 #     csvwriter.writerow(header)
-#         # writing the data rows 
+#         # writing the data rows
 #     csvwriter.writerows(rows)
 # track_name = "id_track.pt"
 # id_track_file_name = os.path.join(save_dir, track_name)
@@ -114,7 +114,7 @@ import random
 #             break
 #         if pid not in cands:
 #             cands.append(pid)
-    
+
 #     user_id = "q_{}".format(qid)
 #     item_id = ["p_{}".format(pid) for pid in cands]
 #     for item in item_id:
@@ -128,13 +128,13 @@ import random
 #     os.mkdir(save_dir)
 # task_name = "exp_data.csv"
 # filename = os.path.join(save_dir, task_name)
-# # writing to csv file 
-# with open(filename, 'w', newline='', encoding='utf-8') as csvfile: 
-#     # creating a csv writer object 
-#     csvwriter = csv.writer(csvfile) 
-#     # writing the fields 
+# # writing to csv file
+# with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+#     # creating a csv writer object
+#     csvwriter = csv.writer(csvfile)
+#     # writing the fields
 #     csvwriter.writerow(header)
-#         # writing the data rows 
+#         # writing the data rows
 #     csvwriter.writerows(rows)
 
 # %%
@@ -184,7 +184,7 @@ import random
 #         row = row[1]
 #         query_text = row[query_column_name]
 #         if query_text not in id_track_dict:
-            
+
 #             continue
 #         qid = id_track_dict[query_text].split("_")[-1]
 #         pids = request_dict[qid]["pid"]
@@ -264,14 +264,14 @@ import random
 #     pos_pid = response_vote[qid]
 #     if pos_pid == -1:
 #         continue
-    
+
 #     request_pids = exp_data[qid]["pid"]
-    
+
 #     request_pids.remove(qid)
 #     for pid in response[qid]:
 #         if pid in request_pids:
 #             request_pids.remove(pid)
-    
+
 #     train_dataset[qid] = {"pos_pid": [pos_pid], "neg_pid": request_pids}
 
 # train_pre = torch.load("scripts/nq_results_human_agent/data_iteration_2/train_data_human_response.pt")
@@ -285,7 +285,7 @@ import random
 
 # %%
 # step-6: <fine-tune zero-shot model>
-# call train_bmt_msmarco.py 
+# call train_bmt_msmarco.py
 # --training_dataset_dir : give the directory of training data generated from step-5
 # --checkpoint : give initial vae model directory
 # --alpha = 1
@@ -297,10 +297,6 @@ import random
 # call ms_marco_eval.py
 # --model_dir : give the directory of trained model from step-6
 # --task : choose a task, e.g. msmarco, nq
-
-
-
-
 
 
 # %%
@@ -367,8 +363,3 @@ import random
 #     print("................................")
 #     for name, value in res.items():
 #         print("{}".format(name), ":", value)
-
-
-
-
-

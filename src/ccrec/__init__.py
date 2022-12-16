@@ -157,7 +157,9 @@ class InteractiveExperiment:
                 explainer = self.working_model.to_explainer()
             else:
                 explainer = None
-            reward_by_policy = self.training_env.step(*self.training_agents, explainer=explainer)
+            reward_by_policy = self.training_env.step(
+                *self.training_agents, explainer=explainer
+            )
             print(f"train-{self.training_env._last_step_idx()}", reward_by_policy)
             if i == 0:
                 print(self.training_env.event_df)
