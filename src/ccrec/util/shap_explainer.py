@@ -87,6 +87,12 @@ class I2IExplainer:
     fixed_context: int = 0  # 0 yields sparser results
     max_length: int = 200
     independent_explainations: bool = False
+    _unitary_inputs: list = dataclasses.field(
+        default_factory=list
+    )  # only when CCREC_DEBUG_SHAP='1'
+    _pairwise_inputs: list = dataclasses.field(
+        default_factory=list
+    )  # only when CCREC_DEBUG_SHAP='1'
 
     @property
     def tokenizer_kw(self):
@@ -100,6 +106,9 @@ class I2IExplainer:
     def _get_unitary_utility(self, texts):
         from ccrec.models.item_tower import VAEItemTower
 
+        if int(os.environ.get("CCREC_DEBUG_SHAP", 0)):
+            self._unitary_inputs.append(texts)
+
         if isinstance(self.item_tower, VAEItemTower):
             _inputs = self.tokenizer(texts.tolist(), **self.tokenizer_kw)
             loss = self.item_tower(**_inputs, output_step="dict")[0].cpu().numpy()
@@ -107,6 +116,9 @@ class I2IExplainer:
         return np.ones(len(texts))
 
     def _get_pairwise_utility(self, x, cand_texts):
+        if int(os.environ.get("CCREC_DEBUG_SHAP", 0)):
+            self._pairwise_inputs.append((x, cand_texts))
+
         _inputs = self.tokenizer(cand_texts.tolist(), **self.tokenizer_kw)
         y = self.item_tower(**_inputs)
         return (x * y).sum(-1).cpu().numpy()

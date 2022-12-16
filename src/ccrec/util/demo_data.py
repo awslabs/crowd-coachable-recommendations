@@ -183,4 +183,4 @@ class DemoData:
             x={"_hist_items": [item_id], "cand_items": cand_items},
         )
         Image.open(image).show()
-        return image, bmt.to_explainer()
+        return image, explainer

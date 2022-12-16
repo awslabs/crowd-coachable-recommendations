@@ -59,7 +59,7 @@ def get_item_df(
 
     item_df["tfidf_indices"] = np.split(tfidf_csr.indices, tfidf_csr.indptr[1:-1])
     item_df["tfidf_words"] = np.split(
-        np.array(tfidf_fit.get_feature_names())[tfidf_csr.indices],
+        np.array(tfidf_fit.get_feature_names_out())[tfidf_csr.indices],
         tfidf_csr.indptr[1:-1],
     )
     item_df["tfidf_data"] = np.split(tfidf_csr.data, tfidf_csr.indptr[1:-1])
