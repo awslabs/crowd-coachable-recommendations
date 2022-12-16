@@ -77,8 +77,8 @@ def test_information_retrieval_ccrec(
             training_prior_fcn=lambda x: (x + 1 / x.shape[1]).clip(0, None).log(),
             pretrained_checkpoint=None,
         )
-    # tfidf_model = rime.models.TF_IDF(item_df)
-    tfidf_model = working_model
+    tfidf_model = rime.models.TF_IDF(item_df)
+    # tfidf_model = working_model
 
     if simulation:
         training_env_kw = {
