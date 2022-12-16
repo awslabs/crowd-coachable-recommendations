@@ -124,6 +124,3 @@ def test_information_retrieval_ccrec(
     print(iexp.training_env.event_df)
 
     return iexp
-
-
-test_information_retrieval_ccrec()

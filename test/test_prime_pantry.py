@@ -155,6 +155,3 @@ def test_prime_pantry_ccrec(
     print(pd.DataFrame(iexp.testing_env._reward_by_policy))
 
     return iexp
-
-
-test_prime_pantry_ccrec(nrows=10, max_epochs=0)
