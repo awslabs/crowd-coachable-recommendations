@@ -359,8 +359,7 @@ class Env:
 
     def _update_events(self, response, step_idx):
         new_events = parse_response(response, step_idx)
-        # self.event_df = pd.concat([self.event_df, new_events], ignore_index=True)
-        self.event_df = new_events
+        self.event_df = pd.concat([self.event_df, new_events], ignore_index=True)
 
     def _create_testing_dataset(self, test_requests=None):
         return Dataset(
