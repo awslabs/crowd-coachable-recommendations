@@ -330,11 +330,11 @@ def bmt_main(
     expl_response,
     gnd_response,
     max_epochs=50,
-    batch_size=None,
+    batch_size=10 * max(1, torch.cuda.device_count()),
     alpha=0.05,
     beta=0.0,
     user_df=None,
-    train_kw=None,
+    train_kw={},
 ):
     """
     item_df = get_item_df()[0]
@@ -353,7 +353,7 @@ def bmt_main(
         alpha=alpha,
         beta=beta,
         max_epochs=max_epochs,
-        batch_size=batch_size * max(1, torch.cuda.device_count()),
+        batch_size=batch_size,
         sample_with_prior=True,
         sample_with_posterior=0,
         replacement=False,
