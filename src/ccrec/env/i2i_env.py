@@ -323,7 +323,7 @@ class I2IImageEnv(I2IEnv):
         cand_images = [
             self.item_df.loc[candidate]["landingImage"] for candidate in x["cand_items"]
         ]
-        if self.summarizer is not None:
+        if hasattr(self, "summarizer") and self.summarizer is not None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             summary = []
             for text in cand_texts:
