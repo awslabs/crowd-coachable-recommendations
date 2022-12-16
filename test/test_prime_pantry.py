@@ -97,7 +97,7 @@ def test_prime_pantry_ccrec(
     if working_model is None:
         working_model = ccrec.models.bbpr.BertBPR(
             item_df,
-            None,
+            batch_size=None,
             max_epochs=max_epochs,
             batch_size=10 * max(1, torch.cuda.device_count()),
             sample_with_prior=True,

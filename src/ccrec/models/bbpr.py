@@ -350,6 +350,7 @@ class BertBPR:
         )
         self.all_inputs = self.tokenizer(self.item_titles.tolist(), **self.tokenizer_kw)
         self._model_kw = {
+            "model_name": model_name,
             "freeze_bert": freeze_bert,
             "do_validation": do_validation,
             **kw,
@@ -514,13 +515,13 @@ class BertBPR:
             elif hasattr(self.model.item_tower, "ae_model"):
                 all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "mean")
             user_embedding = all_emb[dm.i_to_ptr]
-            user_embedding = user_embedding.cuda()
+            user_embedding = user_embedding.to(auto_device())
             for step_p in range(num_item_batches):
                 item_ids = dm.j_to_ptr[
                     step_p * BATCH_SIZE_ : (step_p + 1) * BATCH_SIZE_
                 ]
                 item_embeddings_batch = all_emb[item_ids]
-                item_embeddings_batch = item_embeddings_batch.cuda()
+                item_embeddings_batch = item_embeddings_batch.to(auto_device())
                 num_of_items = item_embeddings_batch.shape[0]
                 scores = self.cos_sim(user_embedding, item_embeddings_batch)
                 scores = scores.cpu()
