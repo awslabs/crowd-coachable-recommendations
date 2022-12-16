@@ -546,7 +546,7 @@ def bbpr_main(
     alpha=0.05,
     beta=0.0,
     user_df=None,
-    train_kw=None,
+    train_kw={},
 ):
     """
     item_df = get_item_df()[0]
