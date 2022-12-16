@@ -416,7 +416,7 @@ class BertBPR:
             strategy=self.strategy,
             log_every_n_steps=1,
             callbacks=[model._checkpoint, LearningRateMonitor()],
-            precision="bf16",
+            precision="bf16" if torch.cuda.is_available() else 32,
         )
 
         if self._model_kw["freeze_bert"] > 0:  # cache all_cls
