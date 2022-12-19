@@ -79,7 +79,7 @@ class LatentNoiseAgent(LatentNoiseAgentBase):
 class VAEAgent(LatentNoiseAgentBase):
     item_df: pd.DataFrame = None
     model_name: str = "distilbert-base-uncased"
-    max_length: int = 32
+    max_length: int = int(os.environ.get("CCREC_MAX_LENGTH", 32))
 
     @property
     def vae_model(self):
