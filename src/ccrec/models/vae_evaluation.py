@@ -43,7 +43,7 @@ def VAE_precision(
             batch,
             truncation=True,
             padding="max_length",
-            max_length=32,
+            max_length=int(os.environ.get("CCREC_MAX_LENGTH", 32)),
             return_tensors="pt",
         )
         with torch.no_grad():

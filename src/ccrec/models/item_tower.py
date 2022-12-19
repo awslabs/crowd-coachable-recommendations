@@ -1,4 +1,4 @@
-import torch, pandas as pd, numpy as np, functools
+import torch, pandas as pd, numpy as np, functools, os
 from datasets import Dataset, DatasetDict
 from rime.util import auto_device
 
@@ -14,7 +14,7 @@ class ItemTowerBase(torch.nn.Module):
         _default_tokenizer_kw = {
             "truncation": True,
             "padding": "max_length",
-            "max_length": 200,
+            "max_length": int(os.environ.get("CCREC_MAX_LENGTH", 200)),
             "return_tensors": "pt",
         }
         self.tokenizer_kw = {**_default_tokenizer_kw, **tokenizer_kw}

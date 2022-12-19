@@ -11,6 +11,7 @@ from ccrec.util import _device_mode_context
 from rime.models.zero_shot import ItemKNN
 from ccrec.env import create_reranking_dataset, create_zero_shot
 from ccrec.models.item_tower import VAEItemTower
+import os
 
 
 class LitVAEModel(_LitValidated):
@@ -57,7 +58,7 @@ class VAEData(LightningDataModule):
         masked=False,
         truncation=True,
         padding="max_length",
-        max_length=32,
+        max_length=int(os.environ.get("CCREC_MAX_LENGTH", 32)),
         **kw,
     ):
         super().__init__()
@@ -122,7 +123,7 @@ def vae_main(
     expl_sample=0,
     reranking_prior=1e5,
     exclude_train=True,
-    max_length=200,
+    max_length=int(os.environ.get("CCREC_MAX_LENGTH", 200)),
     ckpt=None,
 ):
     """

@@ -318,7 +318,7 @@ class BertBPR:
         freeze_bert=0,
         batch_size=None,
         model_name="bert-base-uncased",
-        max_length=128,
+        max_length=int(os.environ.get("CCREC_MAX_LENGTH", 128)),
         max_epochs=10,
         max_steps=-1,
         do_validation=None,
