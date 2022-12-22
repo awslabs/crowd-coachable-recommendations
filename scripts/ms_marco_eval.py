@@ -13,9 +13,14 @@ import sys
 import numpy as np
 import argparse
 import json
+import warnings
 
-from beir import util
-from beir.datasets.data_loader import GenericDataLoader
+try:
+    from beir import util
+    from beir.datasets.data_loader import GenericDataLoader
+except ImportError:
+    warnings.warn("package beir not found")
+
 import pathlib
 import inspect
 
@@ -29,7 +34,10 @@ from src.ccrec.models.bert_mt import _BertMT
 from src.ccrec.models.bbpr import _BertBPR
 from bm_25 import BM25
 
-from beir.retrieval.evaluation import EvaluateRetrieval
+try:
+    from beir.retrieval.evaluation import EvaluateRetrieval
+except ImportError:
+    warnings.warn("package beir not found")
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -137,9 +145,11 @@ def generate_embeddings(
             indices = data_indices[step * batch_size : (step + 1) * batch_size]
             text_batch = [data_dic[index] for index in indices]
             embedding_batch = embedding_func(text_batch)
+            if isinstance(embedding_batch, dict) and "embedding" in embedding_batch:
+                embedding_batch = embedding_batch["embedding"]
             embeddings[
                 step * batch_size : (step * batch_size + len(indices)), :
-            ] = embedding_batch.cpu()
+            ] = torch.as_tensor(embedding_batch).cpu()
     if name is not None:
         torch.save(embeddings, name)
     return embeddings

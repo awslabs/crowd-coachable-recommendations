@@ -125,6 +125,7 @@ def vae_main(
     exclude_train=True,
     max_length=int(os.environ.get("CCREC_MAX_LENGTH", 200)),
     ckpt=None,
+    batch_size=64,
 ):
     """
     item_df = get_item_df()[0]  # indexed by ITEM_ID
@@ -155,13 +156,21 @@ def vae_main(
             gpus=torch.cuda.device_count(),
             strategy="dp" if torch.cuda.device_count() else None,
             log_every_n_steps=1,
+            precision="bf16" if torch.cuda.is_available() else 32,
+            # callbacks=[model._checkpoint, LearningRateMonitor()],
         )
         trainer.fit(tower, datamodule=train_dm)
 
+    if user_df is None:
+        return None, None, tower
+
     ds = Dataset.from_pandas(item_df.rename({"TITLE": "text"}, axis=1))
     with _device_mode_context(tower.model) as model, torch.no_grad():
-        tower.model.ae_model.sample = expl_sample
-        ds = ds.map(model.to_map_fn("text", "embedding"), batched=True, batch_size=64)
+        ds = ds.map(
+            model.to_map_fn("text", "embedding", sample_param=expl_sample),
+            batched=True,
+            batch_size=batch_size,
+        )
     item_emb = np.vstack(ds["embedding"])
     varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
 
