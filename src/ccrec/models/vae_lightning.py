@@ -126,7 +126,7 @@ def vae_main(
     max_length=int(os.environ.get("CCREC_MAX_LENGTH", 200)),
     ckpt=None,
     batch_size_per_device=64,
-    precision="bf16" if torch.cuda.is_available() else 32,
+    precision=32,  # "bf16" diverges
     model_name="distilbert-base-uncased",
 ):
     """
