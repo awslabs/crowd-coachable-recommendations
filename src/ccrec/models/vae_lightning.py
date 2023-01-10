@@ -125,7 +125,9 @@ def vae_main(
     exclude_train=True,
     max_length=int(os.environ.get("CCREC_MAX_LENGTH", 200)),
     ckpt=None,
-    batch_size=64,
+    batch_size_per_device=64,
+    precision="bf16" if torch.cuda.is_available() else 32,
+    model_name="distilbert-base-uncased",
 ):
     """
     item_df = get_item_df()[0]  # indexed by ITEM_ID
@@ -138,8 +140,10 @@ def vae_main(
     if masked is None:
         masked = model_cls_name != "VAEPretrainedModel"
 
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    tower = LitVAEModel(beta, tokenizer=tokenizer, model_cls_name=model_cls_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tower = LitVAEModel(
+        beta, tokenizer=tokenizer, model_name=model_name, model_cls_name=model_cls_name
+    )
     if ckpt is not None:
         print(f"loading from {ckpt}")
         tower.load_state_dict(torch.load(ckpt)["state_dict"])
@@ -147,7 +151,7 @@ def vae_main(
         train_dm = VAEData(
             train_df,
             tokenizer,
-            64 * max(1, torch.cuda.device_count()),
+            batch_size=batch_size_per_device * max(1, torch.cuda.device_count()),
             masked=masked,
             max_length=max_length,
         )
@@ -156,7 +160,7 @@ def vae_main(
             gpus=torch.cuda.device_count(),
             strategy="dp" if torch.cuda.device_count() else None,
             log_every_n_steps=1,
-            precision="bf16" if torch.cuda.is_available() else 32,
+            precision=precision,
             # callbacks=[model._checkpoint, LearningRateMonitor()],
         )
         trainer.fit(tower, datamodule=train_dm)
@@ -169,7 +173,7 @@ def vae_main(
         ds = ds.map(
             model.to_map_fn("text", "embedding", sample_param=expl_sample),
             batched=True,
-            batch_size=batch_size,
+            batch_size=batch_size_per_device,
         )
     item_emb = np.vstack(ds["embedding"])
     varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))

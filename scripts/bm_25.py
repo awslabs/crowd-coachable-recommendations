@@ -12,16 +12,23 @@ class BM25(object):
     def fit(self, X):
         """Fit IDF to documents X"""
         self.vectorizer.fit(X)
-        y = super(TfidfVectorizer, self.vectorizer).transform(X)
-        self.avdl = y.sum(1).mean()
+        self.cache(X)
+        self.avdl = self.last_len_X.mean()
+        return self
 
-    def transform(self, q, X):
+    def cache(self, X):
+        self.last_csc_X = super(TfidfVectorizer, self.vectorizer).transform(X).tocsc()
+        self.last_len_X = self.last_csc_X.sum(1).A1
+        return self
+
+    def transform(self, q, X=None):
         """Calculate BM25 between query q and documents X"""
         b, k1, avdl = self.b, self.k1, self.avdl
 
         # apply CountVectorizer
-        X = super(TfidfVectorizer, self.vectorizer).transform(X)
-        len_X = X.sum(1).A1
+        if X is not None:
+            self.cache(X)
+        X, len_X = self.last_csc_X, self.last_len_X
         (q,) = super(TfidfVectorizer, self.vectorizer).transform([q])
         assert sparse.isspmatrix_csr(q)
 
