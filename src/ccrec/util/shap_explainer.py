@@ -85,7 +85,7 @@ class I2IExplainer:
     item_tower: typing.Callable  # cuda, eval
     tokenizer: typing.Any
     fixed_context: int = 0  # 0 yields sparser results
-    max_length: int = 200
+    max_length: int = int(os.environ.get("CCREC_MAX_LENGTH", 200))
     independent_explainations: bool = False
     _unitary_inputs: list = dataclasses.field(
         default_factory=list

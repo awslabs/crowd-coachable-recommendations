@@ -11,6 +11,7 @@ from ccrec.util import _device_mode_context
 from rime.models.zero_shot import ItemKNN
 from ccrec.env import create_reranking_dataset, create_zero_shot
 from ccrec.models.item_tower import VAEItemTower
+import os
 
 
 class LitVAEModel(_LitValidated):
@@ -57,7 +58,7 @@ class VAEData(LightningDataModule):
         masked=False,
         truncation=True,
         padding="max_length",
-        max_length=32,
+        max_length=int(os.environ.get("CCREC_MAX_LENGTH", 32)),
         **kw,
     ):
         super().__init__()
@@ -122,8 +123,11 @@ def vae_main(
     expl_sample=0,
     reranking_prior=1e5,
     exclude_train=True,
-    max_length=200,
+    max_length=int(os.environ.get("CCREC_MAX_LENGTH", 200)),
     ckpt=None,
+    batch_size_per_device=64,
+    precision=32,  # "bf16" diverges
+    model_name="distilbert-base-uncased",
 ):
     """
     item_df = get_item_df()[0]  # indexed by ITEM_ID
@@ -136,8 +140,10 @@ def vae_main(
     if masked is None:
         masked = model_cls_name != "VAEPretrainedModel"
 
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    tower = LitVAEModel(beta, tokenizer=tokenizer, model_cls_name=model_cls_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tower = LitVAEModel(
+        beta, tokenizer=tokenizer, model_name=model_name, model_cls_name=model_cls_name
+    )
     if ckpt is not None:
         print(f"loading from {ckpt}")
         tower.load_state_dict(torch.load(ckpt)["state_dict"])
@@ -145,7 +151,7 @@ def vae_main(
         train_dm = VAEData(
             train_df,
             tokenizer,
-            64 * max(1, torch.cuda.device_count()),
+            batch_size=batch_size_per_device * max(1, torch.cuda.device_count()),
             masked=masked,
             max_length=max_length,
         )
@@ -154,13 +160,21 @@ def vae_main(
             gpus=torch.cuda.device_count(),
             strategy="dp" if torch.cuda.device_count() else None,
             log_every_n_steps=1,
+            precision=precision,
+            # callbacks=[model._checkpoint, LearningRateMonitor()],
         )
         trainer.fit(tower, datamodule=train_dm)
 
+    if user_df is None:
+        return None, None, tower
+
     ds = Dataset.from_pandas(item_df.rename({"TITLE": "text"}, axis=1))
     with _device_mode_context(tower.model) as model, torch.no_grad():
-        tower.model.ae_model.sample = expl_sample
-        ds = ds.map(model.to_map_fn("text", "embedding"), batched=True, batch_size=64)
+        ds = ds.map(
+            model.to_map_fn("text", "embedding", sample_param=expl_sample),
+            batched=True,
+            batch_size=batch_size_per_device,
+        )
     item_emb = np.vstack(ds["embedding"])
     varCT = ItemKNN(item_df.assign(embedding=item_emb.tolist(), _hist_len=1))
 

@@ -1,4 +1,4 @@
-import torch, pandas as pd, numpy as np, functools
+import torch, pandas as pd, numpy as np, functools, os, collections
 from datasets import Dataset, DatasetDict
 from rime.util import auto_device
 
@@ -14,7 +14,7 @@ class ItemTowerBase(torch.nn.Module):
         _default_tokenizer_kw = {
             "truncation": True,
             "padding": "max_length",
-            "max_length": 200,
+            "max_length": int(os.environ.get("CCREC_MAX_LENGTH", 200)),
             "return_tensors": "pt",
         }
         self.tokenizer_kw = {**_default_tokenizer_kw, **tokenizer_kw}
@@ -38,15 +38,50 @@ class ItemTowerBase(torch.nn.Module):
             f"{self.__class__.__name__} does not support {input_step}->{output_step} forward"
         )
 
-    def to_map_fn(self, input_step, output_step):
+    def to_map_fn(self, input_step, output_step, data_parallel=False, sample_param=0):
+        """this may change eval mode and device in-place"""
         assert (
             self.tokenizer is not None or input_step != "text"
         ), "map_fn with text input requires tokenizer attribute"
-        return lambda data: {
-            output_step: self(**data, input_step=input_step, output_step=output_step)
-            .cpu()
-            .numpy()
-        }
+
+        self.eval()
+        if hasattr(self, "set_sample_param"):
+            self.set_sample_param(sample_param)
+
+        auto_wrap_dict = (
+            lambda x: x
+            if isinstance(x, collections.abc.Mapping)
+            else {"cls": x}
+            if input_step == "cls"
+            else {"text": x}
+            if input_step == "text"
+            else NotImplemented
+        )
+
+        if input_step == "text":
+            input_step = "inputs"
+            tokenizer, tokenizer_kw = self.tokenizer, self.tokenizer_kw
+            auto_wrap_text = lambda x: tokenizer(x["text"], **tokenizer_kw)
+        else:
+            auto_wrap_text = lambda x: x
+
+        if data_parallel:
+            self = torch.nn.DataParallel(self.cuda())
+            auto_wrap_device = lambda x: {k: v.cuda() for k, v in x.items()}
+        else:
+            auto_wrap_device = lambda x: x
+
+        return torch.no_grad()(
+            lambda x: {
+                output_step: self(
+                    **auto_wrap_device(auto_wrap_text(auto_wrap_dict(x))),
+                    input_step=input_step,
+                    output_step=output_step,
+                )
+                .cpu()
+                .numpy()
+            }
+        )
 
     def to_explainer(self, **kw):
         from ccrec.util.shap_explainer import I2IExplainer
@@ -100,6 +135,12 @@ class VAEItemTower(ItemTowerBase):
         self.ae_model = ae_model
         self.cls_to_embedding = ae_model.cls_to_embedding
 
+    def get_sample_param(self):
+        return self.ae_model.get_sample_param()
+
+    def set_sample_param(self, sample):
+        self.ae_model.set_sample_param(sample)
+
     def forward(
         self,
         cls=None,
@@ -117,6 +158,11 @@ class VAEItemTower(ItemTowerBase):
             if output_step == "cls":
                 cls = self.ae_model(**inputs, return_cls=True)
                 return cls
+            if output_step == "mean":
+                mean, std = self.ae_model(
+                    **inputs, return_mean_std=True
+                )  # unnormalized mean
+                return mean
             if output_step == "embedding":
                 return self.ae_model(
                     **inputs, return_embedding=True

@@ -43,7 +43,7 @@ def VAE_precision(
             batch,
             truncation=True,
             padding="max_length",
-            max_length=32,
+            max_length=int(os.environ.get("CCREC_MAX_LENGTH", 32)),
             return_tensors="pt",
         )
         with torch.no_grad():
@@ -85,14 +85,14 @@ def VAE_rerank_entropy(
             item_df["TITLE"][source],
             truncation=True,
             padding="max_length",
-            max_length=32,
+            max_length=int(os.environ.get("CCREC_MAX_LENGTH", 32)),
             return_tensors="pt",
         )
         tokenized_candidates = tokenizer(
             item_df["TITLE"][candidates].tolist(),
             truncation=True,
             padding="max_length",
-            max_length=32,
+            max_length=int(os.environ.get("CCREC_MAX_LENGTH", 32)),
             return_tensors="pt",
         )
 
@@ -161,7 +161,7 @@ def VAE_full_retrieval_unique_items(
             batch,
             truncation=True,
             padding="max_length",
-            max_length=32,
+            max_length=int(os.environ.get("CCREC_MAX_LENGTH", 32)),
             return_tensors="pt",
         )
         with torch.no_grad():

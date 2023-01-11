@@ -1,4 +1,4 @@
-import pandas as pd
+import pandas as pd, os
 from datasets import Dataset, DatasetDict
 from transformers import AutoTokenizer, DefaultDataCollator, TrainingArguments, Trainer
 from transformers import DataCollatorWithPadding
@@ -12,7 +12,7 @@ def VAE_training(
     training_args=None,
     train_set_ratio=0.9,
     model_checkpoint="distilbert-base-uncased",
-    max_length=300,
+    max_length=int(os.environ.get("CCREC_MAX_LENGTH", 300)),
     vae_beta=2e-3,
     batch_size=64,
     max_epochs=10,

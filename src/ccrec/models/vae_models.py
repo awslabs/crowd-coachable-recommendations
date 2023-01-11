@@ -49,6 +49,12 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         print("setting sample=", sample)
         self._sample = sample
 
+    def get_sample_param(self):
+        return self.sample
+
+    def set_sample_param(self, sample):
+        self.sample = sample
+
     def generate_mean(self, hidden_states):
         raise NotImplementedError("return type: torch.Tensor")
 
@@ -107,8 +113,7 @@ class EmbeddingModel(DistilBertPreTrainedModel):
 
         # use standard_layer_norm to avoid using the weights in the trained layer_norm and keep the norm of the embedding as a constant
         if return_embedding:
-            # return self.standard_layer_norm(hidden_states)
-            return mu
+            return self.standard_layer_norm(hidden_states)
 
         prediction_logits = self.vocab_layer_norm(hidden_states)  # (bs, dim)
         prediction_logits = self.vocab_projector(prediction_logits)  # (bs, vocab_size)

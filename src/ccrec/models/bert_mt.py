@@ -209,7 +209,7 @@ class BertMT(BertBPR):
         batch_size=10,
         model_cls_name="VAEPretrainedModel",
         model_name="distilbert-base-uncased",
-        max_length=30,
+        max_length=int(os.environ.get("CCREC_MAX_LENGTH", 30)),
         max_epochs=10,
         max_steps=-1,
         do_validation=None,
