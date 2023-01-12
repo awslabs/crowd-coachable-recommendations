@@ -32,43 +32,54 @@ from ms_marco_eval import ranking, load_data
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--n_steps", type=int, default=1)
-# parser.add_argument("--accu_level", type=float, default=1.)
-# parser.add_argument("--accu_level", type=float, default=0.7)
-parser.add_argument("--accu_level", type=float, default=0.6)
-# parser.add_argument("--accu_level", type=float, default=0.5)
-parser.add_argument("--epochs", type=int, default=10)
 
-args = parser.parse_args()
+N_STEPS = 1
+ACCURACY_LEVEL = 1.0
+NUM_EPOCHS = 10
+DATA_NAME = "nq"
+BATCH_SIZE = 865
+MODEL_NAME = "contriever"
 
 # %%
 # train model
 def training(
-    train_dataset, epochs, model_checkpoint, save_dir, corpus=None, queries=None
+    train_dataset,
+    epochs,
+    model_checkpoint,
+    save_dir,
+    corpus,
+    queries,
+    model_selection,
 ):
-    if corpus is None or queries is None:
-        corpus = load_corpus()
-        queries = load_query()
-
     item_df = load_item_df(train_dataset, corpus, queries)
     user_df = load_user_df(train_dataset)
     expl_response = load_expl_response(train_dataset)
 
-    training_arguments = {
-        "lr": 2e-5,
-        "model_name": "distilbert-base-uncased",
-        "max_length": 300,
-        "pretrained_checkpoint": model_checkpoint,
-        "do_validation": False,
-        "log_directory": save_dir,
-    }
+    if model_selection == "vae":
+        training_arguments = {
+            "lr": 2e-5,
+            "model_name": "distilbert-base-uncased",
+            "max_length": int(os.environ.get("CCREC_MAX_LENGTH", 300)),
+            "pretrained_checkpoint": model_checkpoint,
+            "do_validation": False,
+            "log_directory": save_dir,
+        }
+    elif model_selection == "contriever":
+        training_arguments = {
+            "lr": 2e-5,
+            "model_name": "facebook/contriever",
+            "max_length": int(os.environ.get("CCREC_MAX_LENGTH", 300)),
+            "pretrained_checkpoint": None,
+            "do_validation": False,
+            "log_directory": save_dir,
+        }
+
     _batch_size = 30
     _epochs = epochs
     _alpha = 1.0
     _beta = 2e-3
 
-    _, _, model = bmt_main(
+    _, _, model = bbpr_main(
         item_df,
         expl_response,
         expl_response,
@@ -84,32 +95,47 @@ def training(
 
 # %%
 # evaluate and generate ranking profile
-def generate_ranking_profile(model, save_dir):
-    batch_size = 1024
+def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir):
+    batch_size = 512
 
     _gpu_ids = [i for i in range(torch.cuda.device_count())]
     if torch.cuda.device_count() > 0:
         batch_size = batch_size * len(_gpu_ids)
 
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    tokenize_func = lambda x: tokenizer(
-        x, padding=True, max_length=300, truncation=True, return_tensors="pt"
-    )
+    tokenizer_kw = {
+        "truncation": True,
+        "padding": True,
+        "max_length": int(os.environ.get("CCREC_MAX_LENGTH", 512)),
+        "return_tensors": "pt",
+    }
 
-    model.eval()
-    model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
-    model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
+    if model_name == "vae":
+        tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+        model = model.item_tower
+        model.eval()
+        model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
+        model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
 
-    def transform(x):
-        tokens = tokenize_func(x)
-        outputs, _ = model(**tokens, output_step="return_mean_std")
-        return outputs
+        def transform(x):
+            tokens = tokenizer(x, **tokenizer_kw)
+            outputs, _ = model(**tokens, output_step="return_mean_std")
+            return outputs
+
+    elif model_name == "contriever":
+        tokenizer = AutoTokenizer.from_pretrained("facebook/contriever")
+        model = (
+            model.item_tower if hasattr(model, "item_tower") else model.model.item_tower
+        )
+        model.eval()
+        model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
+        model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
+
+        def transform(x):
+            tokens = tokenizer(x, **tokenizer_kw)
+            outputs = model(**tokens, output_step="mean_pooling")
+            return outputs
 
     embedding_func = lambda x: transform(x)
-
-    # corpus, queries, qrels = load_data("msmarco")
-    corpus, queries, qrels = load_data("hotpotqa")
-
     ranking_profile = ranking(corpus, queries, embedding_func, batch_size)
 
     evaluator = EvaluateRetrieval(None)
@@ -197,69 +223,66 @@ def combine_train_data(train_data_pre, train_data_new):
 
 # %%
 # main function
-def main(opt):
-    n_steps = opt.n_steps
-    accu_level = opt.accu_level
-    epochs = opt.epochs
-
-    corpus, queries, qrels = load_data("hotpotqa")
-    batch_size = 1852
-    # batch_size = 865
-
+def main():
+    corpus, queries, qrels = load_data(DATA_NAME)
     qids_all = list(qrels.keys())
     num_of_train_data = len(qids_all)
     qids_split = [
-        qids_all[x : x + batch_size] for x in range(0, num_of_train_data, batch_size)
+        qids_all[x : x + BATCH_SIZE] for x in range(0, num_of_train_data, BATCH_SIZE)
     ]
     number_of_qid_split_batch = len(qids_split)
 
-    print("Accuracy level:", accu_level)
-    print("Total number of iterations:", number_of_qid_split_batch * n_steps)
+    print("Accuracy level:", ACCURACY_LEVEL)
+    print("Total number of iterations:", number_of_qid_split_batch * N_STEPS)
 
-    bm25_dir = "hotpotqa_results_oracle_agent_{}/data_iteration_0/ranking_profile_bm25.pt".format(
-        accu_level
+    # Load bm25 ranking profile
+    bm25_dir = (
+        "{}_results_oracle_agent_{}/data_iteration_0/ranking_profile_bm25.pt".format(
+            DATA_NAME, ACCURACY_LEVEL
+        )
     )
     ranking_profile_bm25 = torch.load(bm25_dir)
 
-    # load initial model
-    # model_init_dir = "exp_results_oracle_agent_{}/data_iteration_0/model/pytorch_model.bin".format(accu_level)
-    model_init_dir = "hotpotqa_results_oracle_agent_{}/data_iteration_0/model/checkpoints/epoch=4-step=20800.ckpt".format(
-        accu_level
-    )
-    state = torch.load(model_init_dir)
-    model = _BertMT(None, model_name="distilbert-base-uncased")
-    # model.item_tower.ae_model.load_state_dict(state)
-    model.load_state_dict(state["state_dict"])
+    # Load initial model
+    if MODEL_NAME == "vae":
+        model_init_dir = "{}_results_oracle_agent_{}/data_iteration_0/model/checkpoints/epoch=4-step=20800.ckpt".format(
+            DATA_NAME, ACCURACY_LEVEL
+        )
+        state = torch.load(model_init_dir)
+        model = _BertMT(None, model_name="distilbert-base-uncased")
+        model.load_state_dict(state["state_dict"])
+    elif MODEL_NAME == "contriever":
+        model_init_dir = None
+        model = _BertBPR(None, model_name="facebook/contriever")
 
-    for ite in range(n_steps):
-        for step in range(number_of_qid_split_batch):
-            step_ = int(ite * number_of_qid_split_batch + step)
+    for step_outer in range(N_STEPS):
+        for step_inner in range(number_of_qid_split_batch):
+            step = int(step_outer * number_of_qid_split_batch + step_inner)
             previous_working_dir = (
-                "hotpotqa_results_oracle_agent_{}/data_iteration_{}".format(
-                    accu_level, step_ - 1
+                "{}_results_oracle_agent_{}/data_iteration_{}".format(
+                    DATA_NAME, ACCURACY_LEVEL, step - 1
                 )
             )
-            current_working_dir = (
-                "hotpotqa_results_oracle_agent_{}/data_iteration_{}".format(
-                    accu_level, step_
-                )
+            current_working_dir = "{}_results_oracle_agent_{}/data_iteration_{}".format(
+                DATA_NAME, ACCURACY_LEVEL, step
             )
 
             if not os.path.exists(current_working_dir):
                 os.makedirs(current_working_dir)
 
             # generate ranking profile
-            print("Generate ranking profile at step:", step_)
+            print("Generate ranking profile at step:", step)
             save_dir = os.path.join(current_working_dir, "ranking_profile.pt")
             if os.path.isfile(save_dir):
                 ranking_profile = torch.load(save_dir)
             else:
-                model_ = model.item_tower
                 with autocast():
-                    ranking_profile = generate_ranking_profile(model_, save_dir)
+                    ranking_profile = generate_ranking_profile(
+                        model, MODEL_NAME, corpus, queries, qrels, save_dir
+                    )
 
             # generate training data
-            print("Generate training data at step:", step_)
+            print("Generate training data at step:", step)
 
             num_of_samples_from_model = 2
             print("using number of samples from model:", num_of_samples_from_model)
@@ -272,10 +295,10 @@ def main(opt):
             )
 
             train_data = generate_train_data_with_accu_level(
-                train_data_oracle, accu_level, qrels
+                train_data_oracle, ACCURACY_LEVEL, qrels
             )
 
-            if step_ > 0:
+            if step > 0:
                 train_data_prev_dir = os.path.join(
                     previous_working_dir, "training_data.pt"
                 )
@@ -286,24 +309,25 @@ def main(opt):
             torch.save(train_data, train_data_dir)
 
             # train model
-            print("Training model at step:", step_)
+            print("Training model at step:", step)
             print("Number of training data:", len(train_data))
-            save_train_dir = "al_oracle_agent_{}_{}".format(step_, accu_level)
-            bertmt = training(
+            save_train_dir = "al_oracle_agent_{}_{}".format(step, ACCURACY_LEVEL)
+            model = training(
                 train_data,
-                epochs,
+                NUM_EPOCHS,
                 model_checkpoint=model_init_dir,
                 save_dir=save_train_dir,
                 corpus=corpus,
                 queries=queries,
+                model_selection=MODEL_NAME,
             )
-            model = bertmt.model
 
-    model_ = model.item_tower
     save_dir = os.path.join(current_working_dir, "ranking_profile_final.pt")
     with autocast():
-        ranking_profile = generate_ranking_profile(model_, save_dir)
+        ranking_profile = generate_ranking_profile(
+            model, MODEL_NAME, corpus, queries, qrels, save_dir
+        )
 
 
 if __name__ == "__main__":
-    main(args)
+    main()

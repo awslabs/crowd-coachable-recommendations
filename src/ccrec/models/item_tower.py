@@ -114,13 +114,26 @@ class NaiveItemTower(ItemTowerBase):
         if input_step == "inputs":
             # bugfix: weird that self.device does not agree with self.cls_model.device
             inputs = {k: v.to(self.cls_model.device) for k, v in inputs.items()}
-            cls = self.cls_model(**inputs).last_hidden_state[:, 0]
+            last_hidden_state = self.cls_model(**inputs).last_hidden_state
+            cls = last_hidden_state[:, 0]
         else:  # cls
             cls = cls.to(self.device)
 
-        if output_step == "embedding":
+        if output_step == "mean_pooling":  # unnormalized mean pooling
+            assert input_step != "cls", "cannot create mean pooling from cls"
+            mask = inputs["attention_mask"]
+
+            last_hidden_state = last_hidden_state.masked_fill(
+                ~mask[..., None].bool(), 0.0
+            )
+            sentence_embeddings = (
+                last_hidden_state.sum(dim=1) / mask.sum(dim=1)[..., None]
+            )
+            return sentence_embeddings  # unnormalized
+
+        elif output_step == "embedding":  # normalized
             return self.standard_layer_norm(cls)
-        elif output_step == "cls":
+        elif output_step == "cls":  # unnormalized
             return cls
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support {input_step}->{output_step} forward"

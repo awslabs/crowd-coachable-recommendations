@@ -303,7 +303,7 @@ class BertMT(BertBPR):
             strategy=self.strategy,
             log_every_n_steps=1,
             callbacks=[model._checkpoint, LearningRateMonitor()],
-            precision="bf16" if torch.cuda.is_available() else 32,
+            precision=32,  # "bf16" if torch.cuda.is_available() else 32,
         )
 
         trainer.fit(model, datamodule=dm)

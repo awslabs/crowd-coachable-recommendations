@@ -215,7 +215,10 @@ def ranking(corpus, queries, embedding_func, batch_size):
         ]
         passage_embeddings_batch = passage_embeddings_batch.cuda()
         num_of_pasg = passage_embeddings_batch.shape[0]
-        scores = cos_sim(queries_embeddings, passage_embeddings_batch)
+        if int(os.environ.get("CCREC_COS_SIM", 1)):
+            scores = cos_sim(queries_embeddings, passage_embeddings_batch)
+        else:
+            scores = queries_embeddings @ passage_embeddings_batch.T
         ranking_matrix[
             0:num_queries, step * batch_size : (step * batch_size + num_of_pasg)
         ] = scores.cpu()
@@ -329,7 +332,10 @@ def extract_hard_negatives(
                 embedding_qid.cuda(),
                 embedding_neg_pids.cuda(),
             )
-            scores = cos_sim(embedding_qid, embedding_neg_pids)
+            if int(os.environ.get("CCREC_COS_SIM", 1)):
+                scores = cos_sim(embedding_qid, embedding_neg_pids)
+            else:
+                scores = embedding_qid @ embedding_neg_pids.T
             scores = scores.squeeze()
             _, ids_ordered = scores.sort(descending=True)
             neg_pids = [neg_pids[index] for index in ids_ordered]
@@ -359,7 +365,10 @@ def extract_hard_negatives(
                 ]
                 passage_embeddings_batch = passage_embeddings_batch.cuda()
                 num_of_cols = passage_embeddings_batch.shape[0]
-                scores = cos_sim(queries_embeddings_batch, passage_embeddings_batch)
+                if int(os.environ.get("CCREC_COS_SIM", 1)):
+                    scores = cos_sim(queries_embeddings_batch, passage_embeddings_batch)
+                else:
+                    scores = queries_embeddings_batch @ passage_embeddings_batch.T
                 scores = scores.cpu()
                 ranking_matrix[
                     0:num_of_rows,
