@@ -15,6 +15,8 @@ import argparse
 import json
 import warnings
 
+from datasets import Dataset
+
 try:
     from beir import util
     from beir.datasets.data_loader import GenericDataLoader

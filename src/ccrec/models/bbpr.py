@@ -71,6 +71,16 @@ class _BertBPR(_LitValidated):
             weight_decay = 1e-5 if freeze_bert > 0 else 0
         if valid_n_negatives is None:
             valid_n_negatives = n_negatives
+        if tokenizer is None:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if tokenizer_kw is None:
+            tokenizer_kw = dict(
+                padding="max_length",
+                return_tensors="pt",
+                max_length=int(os.environ.get("CCREC_MAX_LENGTH", 256)),
+                truncation=True,
+            )
+
         self.sample_with_prior = sample_with_prior
         self.sample_with_posterior = sample_with_posterior
 
@@ -99,7 +109,7 @@ class _BertBPR(_LitValidated):
         self.all_inputs = all_inputs
 
         if pretrained_checkpoint is not None:
-            self.load_state_dict(torch.load(pretrained_checkpoint))
+            self.load_state_dict(torch.load(pretrained_checkpoint)["state_dict"])
 
         self.objective = "multiple_nrl"
 
@@ -545,6 +555,7 @@ class BertBPR:
 
         else:
             NotImplementedError("NOT IMPLEMENTED!")
+        model_ = model_.cpu()  # cleanup gpu
         return auto_cast_lazy_score(score_matrix)
 
     def to_explainer(self, **kw):

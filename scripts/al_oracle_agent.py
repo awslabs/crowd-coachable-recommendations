@@ -79,7 +79,11 @@ def training(
     _alpha = 1.0
     _beta = 2e-3
 
-    _, _, model = bbpr_main(
+    train_main = locals()[
+        os.environ.get("CCREC_TRAIN_MAIN", "bmt_main")
+    ]  # or bbpr_main
+
+    _, _, model = train_main(
         item_df,
         expl_response,
         expl_response,
@@ -116,7 +120,7 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
         model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
         model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
 
-        def transform(x):
+        def embedding_func(x):
             tokens = tokenizer(x, **tokenizer_kw)
             outputs, _ = model(**tokens, output_step="return_mean_std")
             return outputs
@@ -130,12 +134,11 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
         model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
         model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
 
-        def transform(x):
+        def embedding_func(x):
             tokens = tokenizer(x, **tokenizer_kw)
             outputs = model(**tokens, output_step="mean_pooling")
             return outputs
 
-    embedding_func = lambda x: transform(x)
     ranking_profile = ranking(corpus, queries, embedding_func, batch_size)
 
     evaluator = EvaluateRetrieval(None)

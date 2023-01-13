@@ -68,6 +68,7 @@ class _BertMT(_BertBPR):
             setattr(self, name, getattr(self.hparams, name))
         self.training_prior_fcn = training_prior_fcn
 
+        self.model_name = model_name
         vae_model = getattr(vae_models, model_cls_name).from_pretrained(model_name)
         if hasattr(vae_model, "set_beta"):
             vae_model.set_beta(beta)

@@ -21,7 +21,9 @@ class ItemTowerBase(torch.nn.Module):
 
     @property
     def device(self):
-        return self.module_list[0].device
+        return self.module_list[
+            -1
+        ].device  # workaround for VAEPretrainedModel.device not working
 
     def text_to_inputs(self, text):
         return self.tokenizer(text, **self.tokenizer_kw)
