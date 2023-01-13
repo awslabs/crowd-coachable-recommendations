@@ -115,7 +115,9 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
 
     if model_name == "vae":
         tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-        model = model.item_tower
+        model = (
+            model.item_tower if hasattr(model, "item_tower") else model.model.item_tower
+        )
         model.eval()
         model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
         model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model

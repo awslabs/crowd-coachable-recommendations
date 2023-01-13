@@ -1,3 +1,6 @@
+""" Modified from koreyou/bm25.py
+"""
+
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy import sparse
