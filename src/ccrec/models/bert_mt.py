@@ -90,6 +90,7 @@ class _BertMT(_BertBPR):
         self.all_inputs = all_inputs
         self.alpha = alpha
         self.objective = "multiple_nrl"
+        print(self.objective, f"alpha={self.alpha}")
 
     def set_training_data(self, ct_cycles=None, ft_cycles=None, max_epochs=None, **kw):
         super().set_training_data(**kw)

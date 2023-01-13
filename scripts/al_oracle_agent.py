@@ -79,7 +79,7 @@ def training(
     _alpha = 1.0
     _beta = 2e-3
 
-    train_main = locals()[
+    train_main = globals()[
         os.environ.get("CCREC_TRAIN_MAIN", "bmt_main")
     ]  # or bbpr_main
 
