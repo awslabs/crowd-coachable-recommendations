@@ -113,7 +113,10 @@ class EmbeddingModel(DistilBertPreTrainedModel):
 
         # use standard_layer_norm to avoid using the weights in the trained layer_norm and keep the norm of the embedding as a constant
         if return_embedding:
-            return self.standard_layer_norm(hidden_states)
+            if int(os.environ.get("CCREC_MU_EMBEDDING", "1")):
+                return mu
+            else:
+                return self.standard_layer_norm(hidden_states)
 
         prediction_logits = self.vocab_layer_norm(hidden_states)  # (bs, dim)
         prediction_logits = self.vocab_projector(prediction_logits)  # (bs, vocab_size)
