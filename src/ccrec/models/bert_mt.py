@@ -68,6 +68,7 @@ class _BertMT(_BertBPR):
             setattr(self, name, getattr(self.hparams, name))
         self.training_prior_fcn = training_prior_fcn
 
+        self.model_name = model_name
         vae_model = getattr(vae_models, model_cls_name).from_pretrained(model_name)
         if hasattr(vae_model, "set_beta"):
             vae_model.set_beta(beta)
@@ -89,6 +90,7 @@ class _BertMT(_BertBPR):
         self.all_inputs = all_inputs
         self.alpha = alpha
         self.objective = "multiple_nrl"
+        print(self.objective, f"alpha={self.alpha}")
 
     def set_training_data(self, ct_cycles=None, ft_cycles=None, max_epochs=None, **kw):
         super().set_training_data(**kw)
@@ -303,7 +305,7 @@ class BertMT(BertBPR):
             strategy=self.strategy,
             log_every_n_steps=1,
             callbacks=[model._checkpoint, LearningRateMonitor()],
-            precision="bf16" if torch.cuda.is_available() else 32,
+            precision=32,  # "bf16" if torch.cuda.is_available() else 32,
         )
 
         trainer.fit(model, datamodule=dm)

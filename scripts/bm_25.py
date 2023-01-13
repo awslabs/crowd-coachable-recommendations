@@ -4,7 +4,7 @@ from scipy import sparse
 
 
 class BM25(object):
-    def __init__(self, b=0.75, k1=1.6):
+    def __init__(self, b=0.75, k1=1.6):  # Lucene default: b=0.75, k1=1.2
         self.vectorizer = TfidfVectorizer(norm=None, smooth_idf=False)
         self.b = b
         self.k1 = k1

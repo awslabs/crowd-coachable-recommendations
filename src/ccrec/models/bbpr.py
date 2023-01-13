@@ -71,6 +71,16 @@ class _BertBPR(_LitValidated):
             weight_decay = 1e-5 if freeze_bert > 0 else 0
         if valid_n_negatives is None:
             valid_n_negatives = n_negatives
+        if tokenizer is None:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if tokenizer_kw is None:
+            tokenizer_kw = dict(
+                padding="max_length",
+                return_tensors="pt",
+                max_length=int(os.environ.get("CCREC_MAX_LENGTH", 256)),
+                truncation=True,
+            )
+
         self.sample_with_prior = sample_with_prior
         self.sample_with_posterior = sample_with_posterior
 
@@ -87,6 +97,7 @@ class _BertBPR(_LitValidated):
             setattr(self, name, getattr(self.hparams, name))
         self.training_prior_fcn = training_prior_fcn
 
+        self.model_name = model_name
         self.item_tower = NaiveItemTower(
             _create_bert(model_name, freeze_bert),
             torch.nn.LayerNorm(
@@ -98,7 +109,7 @@ class _BertBPR(_LitValidated):
         self.all_inputs = all_inputs
 
         if pretrained_checkpoint is not None:
-            self.load_state_dict(torch.load(pretrained_checkpoint))
+            self.load_state_dict(torch.load(pretrained_checkpoint)["state_dict"])
 
         self.objective = "multiple_nrl"
 
@@ -124,12 +135,20 @@ class _BertBPR(_LitValidated):
             print(self._checkpoint.dirpath)
 
     def forward(self, batch):  # tokenized or ptr
+        output_step = (
+            "mean_pooling" if self.model_name.lower() == "contriever" else "embedding"
+        )
         if isinstance(batch, collections.abc.Mapping):  # tokenized
-            return self.item_tower(**batch)
+            return self.item_tower(**batch, output_step=output_step)
         elif hasattr(self, "all_cls"):  # ptr
-            return self.item_tower(self.all_cls[batch], input_step="cls")
+            return self.item_tower(
+                self.all_cls[batch], input_step="cls", output_step=output_step
+            )
         else:  # ptr to all_inputs
-            return self.item_tower(**{k: v[batch] for k, v in self.all_inputs.items()})
+            return self.item_tower(
+                **{k: v[batch] for k, v in self.all_inputs.items()},
+                output_step=output_step,
+            )
 
     def _pairwise(self, i, j):  # auto-broadcast on first dimension
         x = self.forward(self.i_to_ptr[i.ravel()]).reshape([*i.shape, -1])
@@ -416,7 +435,7 @@ class BertBPR:
             strategy=self.strategy,
             log_every_n_steps=1,
             callbacks=[model._checkpoint, LearningRateMonitor()],
-            precision="bf16" if torch.cuda.is_available() else 32,
+            precision=32,  # "bf16" if torch.cuda.is_available() else 32,
         )
 
         if self._model_kw["freeze_bert"] > 0:  # cache all_cls
@@ -510,7 +529,9 @@ class BertBPR:
         elif hasattr(self.model.item_tower, "cls_model") or hasattr(
             self.model.item_tower, "ae_model"
         ):
-            if hasattr(self.model.item_tower, "cls_model"):
+            if self.model.model_name.lower() == "contriever":
+                all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "mean_pooling")
+            elif hasattr(self.model.item_tower, "cls_model"):
                 all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "embedding")
             elif hasattr(self.model.item_tower, "ae_model"):
                 all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "mean")
@@ -523,7 +544,10 @@ class BertBPR:
                 item_embeddings_batch = all_emb[item_ids]
                 item_embeddings_batch = item_embeddings_batch.to(auto_device())
                 num_of_items = item_embeddings_batch.shape[0]
-                scores = self.cos_sim(user_embedding, item_embeddings_batch)
+                if int(os.environ.get("CCREC_COS_SIM", 1)):
+                    scores = self.cos_sim(user_embedding, item_embeddings_batch)
+                else:
+                    scores = user_embedding @ item_embeddings_batch.T
                 scores = scores.cpu()
                 score_matrix[
                     :, step_p * BATCH_SIZE_ : (step_p * BATCH_SIZE_ + num_of_items)
@@ -531,6 +555,7 @@ class BertBPR:
 
         else:
             NotImplementedError("NOT IMPLEMENTED!")
+        model_ = model_.cpu()  # cleanup gpu
         return auto_cast_lazy_score(score_matrix)
 
     def to_explainer(self, **kw):
