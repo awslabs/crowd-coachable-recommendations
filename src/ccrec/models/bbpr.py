@@ -128,9 +128,7 @@ class _BertBPR(_LitValidated):
             print(self._checkpoint.dirpath)
 
     def forward(self, batch):  # tokenized or ptr
-        output_step = (
-            "mean_pooling" if self.model_name.lower() == "contriever" else "embedding"
-        )
+        output_step = "mean_pooling" if "contriever" in self.model_name else "embedding"
         if isinstance(batch, collections.abc.Mapping):  # tokenized
             return self.item_tower(**batch, output_step=output_step)
         elif hasattr(self, "all_cls"):  # ptr
@@ -472,8 +470,8 @@ class BertBPR:
                     print("Processing", step, "|", num_batches)
                 text_batch = all_texts[step * batch_size : (step + 1) * batch_size]
                 tokens = self.tokenizer(text_batch, **self.tokenizer_kw)
-                if output_step == "embedding":
-                    embedding_batch = model(**tokens, output_step="embedding")
+                if output_step in ["embedding", "mean_pooling"]:
+                    embedding_batch = model(**tokens, output_step=output_step)
                 elif output_step == "mean":
                     embedding_batch, _ = model(**tokens, output_step="return_mean_std")
                 embeddings_all[
@@ -522,7 +520,7 @@ class BertBPR:
         elif hasattr(self.model.item_tower, "cls_model") or hasattr(
             self.model.item_tower, "ae_model"
         ):
-            if self.model.model_name.lower() == "contriever":
+            if "contriever" in self.model.model_name:
                 all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "mean_pooling")
             elif hasattr(self.model.item_tower, "cls_model"):
                 all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "embedding")

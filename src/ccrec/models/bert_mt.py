@@ -71,7 +71,7 @@ class _BertMT(_BertBPR):
         self.training_prior_fcn = training_prior_fcn
 
         self.model_name = model_name
-        if model_name == "facebook/contriever":
+        if "contriever" in model_name:
             self.item_tower = NaiveItemTower(
                 AutoModel.from_pretrained(model_name),
                 torch.nn.LayerNorm(

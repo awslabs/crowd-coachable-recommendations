@@ -64,7 +64,7 @@ def training(
             "do_validation": False,
             "log_directory": save_dir,
         }
-    elif model_selection == "contriever":
+    elif "contriever" in model_selection:
         training_arguments = {
             "lr": 2e-5,
             "model_name": "facebook/contriever",
@@ -127,7 +127,7 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
             outputs, _ = model(**tokens, output_step="return_mean_std")
             return outputs
 
-    elif model_name == "contriever":
+    elif "contriever" in model_name:
         tokenizer = AutoTokenizer.from_pretrained("facebook/contriever")
         model = (
             model.item_tower if hasattr(model, "item_tower") else model.model.item_tower
@@ -256,7 +256,7 @@ def main():
         state = torch.load(model_init_dir)
         model = _BertMT(None, model_name="distilbert-base-uncased")
         model.load_state_dict(state["state_dict"])
-    elif MODEL_NAME == "contriever":
+    elif "contriever" in MODEL_NAME:
         model_init_dir = None
         model = _BertBPR(None, model_name="facebook/contriever")
 
