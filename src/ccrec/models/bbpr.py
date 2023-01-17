@@ -128,7 +128,7 @@ class _BertBPR(_LitValidated):
             print(self._checkpoint.dirpath)
 
     def forward(self, batch):  # tokenized or ptr
-        output_step = "mean_pooling" if "contriever" in self.model_name else "embedding"
+        output_step = os.environ["CCREC_EMBEDDING_TYPE"]
         if isinstance(batch, collections.abc.Mapping):  # tokenized
             return self.item_tower(**batch, output_step=output_step)
         elif hasattr(self, "all_cls"):  # ptr
@@ -196,9 +196,12 @@ class _BertBPR(_LitValidated):
             pos_emb = self.forward(self.j_to_ptr[j.ravel()]).reshape([*j.shape, -1])
             neg_emb = self.forward(self.j_to_ptr[nj]).reshape([*j.shape, -1])
 
-            qid_emb = torch.nn.functional.normalize(qid_emb, p=2, dim=1)
-            pos_emb = torch.nn.functional.normalize(pos_emb, p=2, dim=1)
-            neg_emb = torch.nn.functional.normalize(neg_emb, p=2, dim=1)
+            if os.environ["CCREC_SIM_TYPE"] == "cos":
+                qid_emb = torch.nn.functional.normalize(qid_emb, p=2, dim=1)
+                pos_emb = torch.nn.functional.normalize(pos_emb, p=2, dim=1)
+                neg_emb = torch.nn.functional.normalize(neg_emb, p=2, dim=1)
+            # else: dot
+
             pos_socres = torch.mm(qid_emb, pos_emb.transpose(0, 1))
             neg_scores = torch.mm(qid_emb, neg_emb.transpose(0, 1))
             labels = torch.tensor(
