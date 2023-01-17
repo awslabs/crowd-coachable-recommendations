@@ -17,7 +17,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 import functools, torch, numpy as np, pandas as pd
 import os, itertools, dataclasses, warnings, collections, re, tqdm
-from ccrec.util import _device_mode_context
+from ccrec.util import _device_mode_context, get_training_precision
 from ccrec.util.shap_explainer import I2IExplainer
 from ccrec.models.item_tower import NaiveItemTower
 import rime
@@ -426,7 +426,7 @@ class BertBPR:
             strategy=self.strategy,
             log_every_n_steps=1,
             callbacks=[model._checkpoint, LearningRateMonitor()],
-            precision=32,  # "bf16" if torch.cuda.is_available() else 32,
+            precision=get_training_precision(),
         )
 
         if self._model_kw["freeze_bert"] > 0:  # cache all_cls
@@ -470,10 +470,9 @@ class BertBPR:
                     print("Processing", step, "|", num_batches)
                 text_batch = all_texts[step * batch_size : (step + 1) * batch_size]
                 tokens = self.tokenizer(text_batch, **self.tokenizer_kw)
-                if output_step in ["embedding", "mean_pooling"]:
-                    embedding_batch = model(**tokens, output_step=output_step)
-                elif output_step == "mean":
-                    embedding_batch, _ = model(**tokens, output_step="return_mean_std")
+                embedding_batch = model(
+                    **tokens, output_step=os.environ["CCREC_EMBEDDING_TYPE"]
+                )
                 embeddings_all[
                     step * batch_size : (step * batch_size + len(text_batch)), :
                 ] = embedding_batch.cpu()
@@ -520,12 +519,9 @@ class BertBPR:
         elif hasattr(self.model.item_tower, "cls_model") or hasattr(
             self.model.item_tower, "ae_model"
         ):
-            if "contriever" in self.model.model_name:
-                all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "mean_pooling")
-            elif hasattr(self.model.item_tower, "cls_model"):
-                all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "embedding")
-            elif hasattr(self.model.item_tower, "ae_model"):
-                all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "mean")
+            all_emb = self.get_all_embeddings(
+                model_, BATCH_SIZE_, output_step="embedding"
+            )
             user_embedding = all_emb[dm.i_to_ptr]
             user_embedding = user_embedding.to(auto_device())
             for step_p in range(num_item_batches):
@@ -535,9 +531,9 @@ class BertBPR:
                 item_embeddings_batch = all_emb[item_ids]
                 item_embeddings_batch = item_embeddings_batch.to(auto_device())
                 num_of_items = item_embeddings_batch.shape[0]
-                if int(os.environ.get("CCREC_COS_SIM", 1)):
+                if os.environ["CCREC_SIM_TYPE"] == "cos":
                     scores = self.cos_sim(user_embedding, item_embeddings_batch)
-                else:
+                else:  # dot
                     scores = user_embedding @ item_embeddings_batch.T
                 scores = scores.cpu()
                 score_matrix[

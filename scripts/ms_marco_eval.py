@@ -147,8 +147,6 @@ def generate_embeddings(
             indices = data_indices[step * batch_size : (step + 1) * batch_size]
             text_batch = [data_dic[index] for index in indices]
             embedding_batch = embedding_func(text_batch)
-            if isinstance(embedding_batch, dict) and "embedding" in embedding_batch:
-                embedding_batch = embedding_batch["embedding"]
             embeddings[
                 step * batch_size : (step * batch_size + len(indices)), :
             ] = torch.as_tensor(embedding_batch).cpu()
@@ -217,9 +215,9 @@ def ranking(corpus, queries, embedding_func, batch_size):
         ]
         passage_embeddings_batch = passage_embeddings_batch.cuda()
         num_of_pasg = passage_embeddings_batch.shape[0]
-        if int(os.environ.get("CCREC_COS_SIM", 1)):
+        if os.environ["CCREC_SIM_TYPE"] == "cos":
             scores = cos_sim(queries_embeddings, passage_embeddings_batch)
-        else:
+        else:  # dot
             scores = queries_embeddings @ passage_embeddings_batch.T
         ranking_matrix[
             0:num_queries, step * batch_size : (step * batch_size + num_of_pasg)
@@ -334,9 +332,9 @@ def extract_hard_negatives(
                 embedding_qid.cuda(),
                 embedding_neg_pids.cuda(),
             )
-            if int(os.environ.get("CCREC_COS_SIM", 1)):
+            if os.environ["CCREC_SIM_TYPE"] == "cos":
                 scores = cos_sim(embedding_qid, embedding_neg_pids)
-            else:
+            else:  # dot
                 scores = embedding_qid @ embedding_neg_pids.T
             scores = scores.squeeze()
             _, ids_ordered = scores.sort(descending=True)
@@ -367,9 +365,9 @@ def extract_hard_negatives(
                 ]
                 passage_embeddings_batch = passage_embeddings_batch.cuda()
                 num_of_cols = passage_embeddings_batch.shape[0]
-                if int(os.environ.get("CCREC_COS_SIM", 1)):
+                if os.environ["CCREC_SIM_TYPE"] == "cos":
                     scores = cos_sim(queries_embeddings_batch, passage_embeddings_batch)
-                else:
+                else:  # dot
                     scores = queries_embeddings_batch @ passage_embeddings_batch.T
                 scores = scores.cpu()
                 ranking_matrix[

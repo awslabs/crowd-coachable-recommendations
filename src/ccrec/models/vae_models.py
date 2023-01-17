@@ -75,7 +75,7 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_cls: Optional[bool] = False,
         return_mean_std: Optional[bool] = False,
-        return_embedding: Optional[bool] = False,
+        return_mean_layer_norm: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[MaskedLMOutput, Tuple[torch.Tensor, ...]]:
 
@@ -112,11 +112,8 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         hidden_states = self.activation(hidden_states)  # (bs, dim)
 
         # use standard_layer_norm to avoid using the weights in the trained layer_norm and keep the norm of the embedding as a constant
-        if return_embedding:
-            if int(os.environ.get("CCREC_MU_EMBEDDING", "1")):
-                return mu
-            else:
-                return self.standard_layer_norm(hidden_states)
+        if return_mean_layer_norm:
+            return self.standard_layer_norm(hidden_states)
 
         prediction_logits = self.vocab_layer_norm(hidden_states)  # (bs, dim)
         prediction_logits = self.vocab_projector(prediction_logits)  # (bs, vocab_size)

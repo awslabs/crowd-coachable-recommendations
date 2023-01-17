@@ -1,6 +1,7 @@
 import torch, pandas as pd, numpy as np, functools, os, collections
 from datasets import Dataset, DatasetDict
 from rime.util import auto_device
+import warnings
 
 
 class ItemTowerBase(torch.nn.Module):
@@ -121,7 +122,17 @@ class NaiveItemTower(ItemTowerBase):
         else:  # cls
             cls = cls.to(self.device)
 
-        if output_step == "mean_pooling":  # unnormalized mean pooling
+        if output_step == "embedding":
+            output_step = os.environ["CCREC_EMBEDDING_TYPE"]
+            warnings.warn(
+                f"{self.__class__} inferring output_step from CCREC_EMBEDDING_TYPE as {output_step}"
+            )
+
+        if output_step in ["cls", "mu", "mean"]:
+            return cls
+        elif output_step == "mean_layer_norm":
+            return self.standard_layer_norm(cls)
+        elif output_step == "mean_pooling":
             assert input_step != "cls", "cannot create mean pooling from cls"
             mask = inputs["attention_mask"]
 
@@ -133,10 +144,6 @@ class NaiveItemTower(ItemTowerBase):
             )
             return sentence_embeddings  # unnormalized
 
-        elif output_step == "embedding":  # normalized
-            return self.standard_layer_norm(cls)
-        elif output_step == "cls":  # unnormalized
-            return cls
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support {input_step}->{output_step} forward"
         )
@@ -168,6 +175,12 @@ class VAEItemTower(ItemTowerBase):
             inputs = self.text_to_inputs(text=text)
             input_step = "inputs"
 
+        if output_step == "embedding":
+            output_step = os.environ["CCREC_EMBEDDING_TYPE"]
+            warnings.warn(
+                f"{self.__class__} inferring output_step from CCREC_EMBEDDING_TYPE as {output_step}"
+            )
+
         if input_step == "inputs":
             inputs = {k: v.to(self.ae_model.device) for k, v in inputs.items()}
             if output_step == "cls":
@@ -178,19 +191,15 @@ class VAEItemTower(ItemTowerBase):
                     **inputs, return_mean_std=True
                 )  # unnormalized mean
                 return mean
-            if output_step == "embedding":
+            if output_step == "mean_layer_norm":
                 return self.ae_model(
-                    **inputs, return_embedding=True
+                    **inputs, return_mean_layer_norm=True
                 )  # normalized embedding
             elif output_step == "dict":
                 return self.ae_model(**inputs, return_dict=True)  # ct loss and logits
-            elif output_step == "return_mean_std":
-                return self.ae_model(
-                    **inputs, return_mean_std=True
-                )  # ct loss and logits
 
         elif input_step == "cls":
-            if output_step == "embedding":
+            if output_step == "mean_layer_norm":
                 return self.cls_to_embedding(cls)
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support {input_step}->{output_step} forward"

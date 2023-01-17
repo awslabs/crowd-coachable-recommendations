@@ -7,7 +7,7 @@ from ccrec.models import vae_models
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 import rime
 from rime.util import _LitValidated
-from ccrec.util import _device_mode_context
+from ccrec.util import _device_mode_context, get_training_precision
 from rime.models.zero_shot import ItemKNN
 from ccrec.env import create_reranking_dataset, create_zero_shot
 from ccrec.models.item_tower import VAEItemTower
@@ -126,7 +126,7 @@ def vae_main(
     max_length=int(os.environ.get("CCREC_MAX_LENGTH", 200)),
     ckpt=None,
     batch_size_per_device=64,
-    precision=32,  # "bf16" diverges
+    precision=get_training_precision(),
     model_name="distilbert-base-uncased",
 ):
     """

@@ -6,6 +6,7 @@ import sys
 import random
 from torch.cuda.amp import autocast
 import argparse
+import warnings
 
 import inspect
 from beir.retrieval.evaluation import EvaluateRetrieval
@@ -124,7 +125,7 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
 
         def embedding_func(x):
             tokens = tokenizer(x, **tokenizer_kw)
-            outputs, _ = model(**tokens, output_step="return_mean_std")
+            outputs = model(**tokens, output_step=os.environ["CCREC_EMBEDDING_TYPE"])
             return outputs
 
     elif "contriever" in model_name:
@@ -136,9 +137,13 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
         model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
         model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
 
+        embedding_type = os.environ["CCREC_EMBEDDING_TYPE"]
+        if embedding_type != "mean_pooling":
+            warnings.warn(f"{embedding_type} != mean_pooling for contriever models")
+
         def embedding_func(x):
             tokens = tokenizer(x, **tokenizer_kw)
-            outputs = model(**tokens, output_step="mean_pooling")
+            outputs = model(**tokens, output_step=embedding_type)
             return outputs
 
     ranking_profile = ranking(corpus, queries, embedding_func, batch_size)

@@ -24,6 +24,7 @@ from ccrec.models.vae_lightning import VAEData
 import rime
 from ccrec.env import create_reranking_dataset
 from ccrec.models.item_tower import VAEItemTower, NaiveItemTower
+from ccrec.util import get_training_precision
 from transformers import get_linear_schedule_with_warmup, AutoModel, AutoTokenizer
 from pytorch_lightning.callbacks import LearningRateMonitor
 
@@ -321,7 +322,7 @@ class BertMT(BertBPR):
             strategy=self.strategy,
             log_every_n_steps=1,
             callbacks=[model._checkpoint, LearningRateMonitor()],
-            precision=32,  # "bf16" if torch.cuda.is_available() else 32,
+            precision=get_training_precision(),
         )
 
         trainer.fit(model, datamodule=dm)
