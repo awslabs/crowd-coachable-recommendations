@@ -28,6 +28,8 @@ env_defaults = [
     ("CCREC_LEGACY_VAE_BUG", "0", ["0", "1"]),
     ("CCREC_DEBUG_SHAP", "0", ["0", "1"]),
     ("CCREC_TRAINING_PRECISION", "32", ["32", "bf16"]),
+    ("CCREC_BBPR_INV_TEMPERATURE", "20", None),
+    #
     ("CCREC_INIT_ENV_DONE", "1", ["0", "1"]),
 ]
 

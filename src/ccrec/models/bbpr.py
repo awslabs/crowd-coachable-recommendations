@@ -207,7 +207,8 @@ class _BertBPR(_LitValidated):
             labels = torch.tensor(
                 range(len(pos_socres)), dtype=torch.long, device=pos_socres.device
             )
-            scores = torch.cat((pos_socres, neg_scores), dim=1) * 20.0
+            inv_temperature = float(os.environ.get("CCREC_BBPR_INV_TEMPERATURE", 20))
+            scores = torch.cat((pos_socres, neg_scores), dim=1) * inv_temperature
             loss = torch.nn.CrossEntropyLoss()(scores, labels)
 
             return loss
