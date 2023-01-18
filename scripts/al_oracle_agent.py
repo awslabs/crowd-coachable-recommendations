@@ -39,7 +39,7 @@ ACCURACY_LEVEL = 1.0
 NUM_EPOCHS = 10
 DATA_NAME = "nq"
 BATCH_SIZE = 865
-MODEL_NAME = "contriever"
+MODEL_NAME = "facebook/contriever"
 
 # %%
 # train model
@@ -68,7 +68,7 @@ def training(
     elif "contriever" in model_selection:
         training_arguments = {
             "lr": 2e-5,
-            "model_name": "facebook/contriever",
+            "model_name": model_selection,
             "max_length": int(os.environ.get("CCREC_MAX_LENGTH", 300)),
             "pretrained_checkpoint": None,
             "do_validation": False,
@@ -129,7 +129,7 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
             return outputs
 
     elif "contriever" in model_name:
-        tokenizer = AutoTokenizer.from_pretrained("facebook/contriever")
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = (
             model.item_tower if hasattr(model, "item_tower") else model.model.item_tower
         )
