@@ -46,6 +46,12 @@ def init_env_defaults():
             assert val in options
         print(f"{prefix} {name}={val}; options: {options}")
 
+    if (
+        os.environ["CCREC_SIM_TYPE"] == "dot"
+        and float(os.environ["CCREC_BBPR_INV_TEMPERATURE"]) >= 20
+    ):
+        warnings.warn("dot similarity works best with small inv_temperature")
+
     for k, v in os.environ.items():
         if k.startswith("CCREC") and k not in [x[0] for x in env_defaults]:
             warnings.warn(f"env {k}={v} not recognized by ccrec")
