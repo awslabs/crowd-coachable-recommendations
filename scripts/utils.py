@@ -30,6 +30,8 @@ import random
 # 2: id_track --> dict: query -> qid
 # '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
+# import os
+# os.environ["CCREC_DISPLAY_LENGTH"] = "250"
 # import re
 # import csv
 
@@ -37,8 +39,8 @@ import random
 # ranking_profile_bm25 = torch.load("scripts/hotpotqa_results_human_agent/data_iteration_0/ranking_profile_bm25.pt")
 
 # def filter_string(text):
-#     new_text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
-#     return new_text
+#     new_text = re.sub(r"[^a-zA-Z0-9 ,:.;?$!()'&\[\]]", "", text)
+#     return new_text[:int(os.environ.get("CCREC_DISPLAY_LENGTH", 250))]
 
 # qids_all = list(qrels.keys())
 # qids_all = qids_all[0:500]

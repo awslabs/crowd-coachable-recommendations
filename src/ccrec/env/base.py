@@ -4,7 +4,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from ccrec.util import merge_unique
 import rime
 from rime.dataset import Dataset
-from rime.util import indices2csr, perplexity, matrix_reindex
+from rime.util import indices2csr, perplexity, matrix_reindex, cached_property
 
 
 def create_zero_shot(
@@ -260,7 +260,7 @@ class Env:
         self._response = {}
         self._reward_by_policy = []
 
-    @functools.cached_property
+    @cached_property
     def _item_titles(self):
         item_df = (
             self.item_df

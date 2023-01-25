@@ -117,7 +117,11 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
     if model_name == "vae":
         tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
         model = (
-            model.item_tower if hasattr(model, "item_tower") else model.model.item_tower
+            model.item_tower
+            if hasattr(model, "item_tower")
+            else model.model.item_tower
+            if hasattr(model, "model")
+            else model
         )
         model.eval()
         model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
@@ -131,7 +135,11 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
     elif "contriever" in model_name:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = (
-            model.item_tower if hasattr(model, "item_tower") else model.model.item_tower
+            model.item_tower
+            if hasattr(model, "item_tower")
+            else model.model.item_tower
+            if hasattr(model, "model")
+            else model
         )
         model.eval()
         model = torch.nn.DataParallel(model, device_ids=_gpu_ids)

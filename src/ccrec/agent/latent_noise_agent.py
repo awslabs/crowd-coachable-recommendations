@@ -7,6 +7,7 @@ from rime.util import (
     auto_cast_lazy_score,
     empty_cache_on_exit,
     RandScore,
+    cached_property,
 )
 from ccrec.agent.base import Agent
 from ccrec.util import merge_unique
@@ -93,7 +94,7 @@ class VAEAgent(LatentNoiseAgentBase):
                 raise ValueError(f"not understanding {model}")
         return model
 
-    @functools.cached_property
+    @cached_property
     @torch.no_grad()
     def _cached_mu_std(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
