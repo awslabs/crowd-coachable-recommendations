@@ -133,11 +133,11 @@ class _BertBPR(_LitValidated):
             return self.item_tower(**batch, output_step=output_step)
         elif hasattr(self, "all_cls"):  # ptr
             return self.item_tower(
-                self.all_cls[batch], input_step="cls", output_step=output_step
+                self.all_cls[batch.cpu()], input_step="cls", output_step=output_step
             )
         else:  # ptr to all_inputs
             return self.item_tower(
-                **{k: v[batch] for k, v in self.all_inputs.items()},
+                **{k: v[batch.cpu()] for k, v in self.all_inputs.items()},
                 output_step=output_step,
             )
 
