@@ -1,6 +1,7 @@
 import torch, pandas as pd, numpy as np, functools, os, collections
 from datasets import Dataset, DatasetDict
 from rime.util import auto_device
+from ccrec.util.data_parallel import DataParallel
 import warnings
 
 
@@ -69,7 +70,7 @@ class ItemTowerBase(torch.nn.Module):
             auto_wrap_text = lambda x: x
 
         if data_parallel:
-            self = torch.nn.DataParallel(self.cuda())
+            self = DataParallel(self.cuda()).cache_replicas()
             auto_wrap_device = lambda x: {k: v.cuda() for k, v in x.items()}
         else:
             auto_wrap_device = lambda x: x

@@ -20,6 +20,7 @@ from src.ccrec.models.bert_mt import bmt_main
 from src.ccrec.models.bbpr import bbpr_main
 from src.ccrec.models.bert_mt import _BertMT
 from src.ccrec.models.bbpr import _BertBPR
+from src.ccrec.util.data_parallel import DataParallel
 
 from train_bmt_msmarco import (
     load_corpus,
@@ -124,8 +125,7 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
             else model
         )
         model.eval()
-        model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
-        model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
+        model = DataParallel(model.cuda(), device_ids=_gpu_ids).cache_replicas()
 
         def embedding_func(x):
             tokens = tokenizer(x, **tokenizer_kw)
@@ -142,8 +142,7 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
             else model
         )
         model.eval()
-        model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
-        model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
+        model = DataParallel(model.cuda(), device_ids=_gpu_ids).cache_replicas()
 
         embedding_type = os.environ["CCREC_EMBEDDING_TYPE"]
         if embedding_type != "mean_pooling":
