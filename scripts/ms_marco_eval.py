@@ -59,7 +59,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 # %%
-def load_data(task):
+def load_data(task, data_split=None):
     if task == "ms_marco_full_ranking":
         corpus = pd.read_csv(
             "data/ms_marco/collection.tsv",
@@ -118,10 +118,11 @@ def load_data(task):
             pathlib.Path("./data/scifact/").parent.absolute(), "datasets"
         )
         data_path = util.download_and_unzip(url, out_dir)
-        if data_name == "msmarco":
-            data_split = "dev"
-        else:
-            data_split = "test"
+        if data_split is None:
+            if data_name == "msmarco":
+                data_split = "dev"
+            else:
+                data_split = "test"
         corpus_, queries, qrels = GenericDataLoader(data_folder=data_path).load(
             split=data_split
         )
