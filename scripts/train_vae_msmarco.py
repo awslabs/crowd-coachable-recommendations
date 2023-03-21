@@ -32,6 +32,7 @@ parser.add_argument("--beta", default=2e-3, type=float)
 
 args = parser.parse_args()
 
+
 # %%
 # load MS_MARCO data
 def load_corpus():

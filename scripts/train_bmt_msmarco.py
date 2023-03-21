@@ -48,6 +48,7 @@ parser.add_argument("--do_validation", default=False, type=bool)
 
 args = parser.parse_args()
 
+
 # %%
 # load MS_MARCO data
 def load_data(task):
@@ -111,7 +112,6 @@ def load_training_data(num_of_negative_samples=1000000):
     count = 0
     with open(hard_negatives_filepath, "rt") as fIn:
         for line in fIn:
-
             data = json.loads(line)
             qid = data["qid"]
             pos_pids = data["pos"]

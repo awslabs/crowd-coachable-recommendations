@@ -10,7 +10,6 @@ def test_run(
     unique_titles=["Apple", "Banana", "Orange", "Strawberry", "Grape"],
     test_every=2,
 ):
-
     nunique_titles = len(unique_titles)
     item_df = pd.Series(unique_titles + unique_titles).to_frame("TITLE")
     event_df = (

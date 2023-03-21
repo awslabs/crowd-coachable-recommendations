@@ -7,7 +7,8 @@ import warnings
 
 class ItemTowerBase(torch.nn.Module):
     """support text -> inputs -> cls -> embedding / loss;
-    tokenizer is required for text_to_inputs, to_map_fn and to_explainer for e2e inference"""
+    tokenizer is required for text_to_inputs, to_map_fn and to_explainer for e2e inference
+    """
 
     def __init__(self, *module_list, tokenizer=None, tokenizer_kw={}):
         super().__init__()

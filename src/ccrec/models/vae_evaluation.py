@@ -18,6 +18,7 @@ from rime.models.zero_shot import ItemKNN
 # need a VAE model. For example,
 # model = VAEPretrainedModel.from_pretrained("./VAE_model_prime_beta_0.002/checkpoint-500")
 
+
 # return the precison evaluated on the prime_pantry data set
 def VAE_precision(
     model,
@@ -70,7 +71,6 @@ def VAE_rerank_entropy(
     embed_size=768,
     model_checkpoint="distilbert-base-uncased",
 ):
-
     num_item = len(item_df)
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
     entropy = 0
@@ -144,7 +144,6 @@ def VAE_full_retrieval_unique_items(
     batch_size=64,
     num_of_recommendation=10,
 ):
-
     num_item = len(item_df)
     num_of_batch = num_item // batch_size + 1
 
@@ -179,10 +178,8 @@ def VAE_full_retrieval_unique_items(
     diff_match_set = [set() for _ in range(num_item)]
 
     for _ in range(num_of_recommendation):
-
         item_embed = torch.empty([len(ds["TITLE"]), embed_size])
         for i in range(num_of_batch):
-
             if (i + 1) * batch_size <= num_item:
                 batch_length = batch_size
             else:

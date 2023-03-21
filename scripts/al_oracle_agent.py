@@ -42,6 +42,7 @@ DATA_NAME = "nq"
 BATCH_SIZE = 865
 MODEL_NAME = "facebook/contriever"
 
+
 # %%
 # train model
 def training(

@@ -50,6 +50,7 @@ parser.add_argument("--tower_name", default="vae_tower", type=str)
 
 args = parser.parse_args()
 
+
 # %%
 # load MS_MARCO data
 def load_data(task):

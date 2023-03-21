@@ -78,7 +78,6 @@ class EmbeddingModel(DistilBertPreTrainedModel):
         return_mean_layer_norm: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[MaskedLMOutput, Tuple[torch.Tensor, ...]]:
-
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
         )
@@ -209,7 +208,6 @@ class VAEPretrainedModel(EmbeddingModel):
         return torch.exp(0.5 * log_var)
 
     def compute_output_loss(self, mu, std, prediction_logits, input_ids, labels):
-
         if labels is None:
             labels = (
                 input_ids

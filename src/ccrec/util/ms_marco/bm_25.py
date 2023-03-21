@@ -14,6 +14,7 @@ from bm_25 import BM25
 
 MaxMRRRank = 100
 
+
 # %%
 # generate rankings
 def load_corpus():

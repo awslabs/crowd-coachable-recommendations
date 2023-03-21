@@ -103,7 +103,6 @@ def test_simplest(
     epsilon=0.5,
     unique_titles=["Apple", "Banana", "Orange", "Strawberry", "Grape"],
 ):
-
     nunique_titles = len(unique_titles)
     item_df = pd.Series(unique_titles + unique_titles).to_frame("TITLE")
     event_df = pd.DataFrame(

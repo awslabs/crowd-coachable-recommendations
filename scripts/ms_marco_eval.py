@@ -58,6 +58,7 @@ args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
+
 # %%
 def load_data(task, data_split=None):
     if task == "ms_marco_full_ranking":

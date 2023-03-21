@@ -13,6 +13,7 @@ import os
 # use ms_marco_eval.py for MRR score
 # ./ms_marco_eval.py
 
+
 # dev: development set e.g. top-1000
 # queries: dictionary [qid, query]
 # corpus: dictionary [pid, passage]
@@ -270,10 +271,8 @@ def VAE_full_retrieval_unique_items(
     diff_match_set = [set() for _ in range(num_item)]
 
     for _ in range(num_of_recommendation):
-
         item_embed = torch.empty([len(ds["TITLE"]), embed_size]).cuda()
         for i in range(num_of_batch):
-
             if (i + 1) * batch_size <= num_item:
                 batch_length = batch_size
             else:
