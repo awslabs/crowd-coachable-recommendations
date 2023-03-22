@@ -155,7 +155,10 @@ def generate_embeddings(
             text_batch = [data_dic[index] for index in indices]
             embedding_batch = embedding_func(text_batch)
             embeddings.append(
-                torch.as_tensor(embedding_batch).to("cpu", non_blocking=True)
+                torch.as_tensor(embedding_batch).to(
+                    "cpu",
+                    non_blocking=bool(int(os.environ.get("CCREC_NON_BLOCKING", "1"))),
+                )
             )
     torch.cuda.synchronize()
     print(f"Processed total {num} t={time.time() - tic:.1f}s")
