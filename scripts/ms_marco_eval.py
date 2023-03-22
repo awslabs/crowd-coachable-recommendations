@@ -149,6 +149,7 @@ def generate_embeddings(
                 print(
                     f"Processed {step * batch_size} | {num}",
                     f"t={time.time() - tic:.1f}s",
+                    f"/ {(time.time() - tic) * num / (step * batch_size):.1f}s",
                 )
             indices = data_indices[step * batch_size : (step + 1) * batch_size]
             text_batch = [data_dic[index] for index in indices]
