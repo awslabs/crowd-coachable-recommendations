@@ -141,17 +141,24 @@ def generate_embeddings(
 ):
     num = len(data_indices)
     num_batches = math.ceil(num / batch_size)
-    embeddings = torch.zeros(num, embedding_size)
+    embeddings = []
+    tic = time.time()
     with torch.no_grad():
         for step in range(num_batches):
-            if (step % 100) == 0:
-                print("Processing", step, "|", num_batches)
+            if step != 0 and step & (step - 1) == 0:  # power of 2
+                print(
+                    f"Processed {step * batch_size} | {num}",
+                    f"t={time.time() - tic:.1f}s",
+                )
             indices = data_indices[step * batch_size : (step + 1) * batch_size]
             text_batch = [data_dic[index] for index in indices]
             embedding_batch = embedding_func(text_batch)
-            embeddings[
-                step * batch_size : (step * batch_size + len(indices)), :
-            ] = torch.as_tensor(embedding_batch).cpu()
+            embeddings.append(
+                torch.as_tensor(embedding_batch).to("cpu", non_blocking=True)
+            )
+    torch.cuda.synchronize()
+    print(f"Processed total {num} t={time.time() - tic:.1f}s")
+    embeddings = torch.vstack(embeddings)
     if name is not None:
         torch.save(embeddings, name)
     return embeddings
