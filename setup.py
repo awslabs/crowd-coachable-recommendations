@@ -19,14 +19,14 @@ setup(
     install_requires=[
         "datasets >= 2.4.0",
         "shap >= 0.41.0",
-        "recurrent-intensity-model-experiments",
+        (
+            "recurrent-intensity-model-experiments @ "
+            "git+https://github.com/awslabs/recurrent-intensity-model-experiments"
+            "@main#egg=recurrent-intensity-model-experiments"
+        ),
         "pytest",
         "flaky",
         "tensorboard",
-    ],
-    dependency_links=[
-        # Make sure to include the `#egg` portion so the `install_requires` recognizes the package
-        "git+https://github.com/awslabs/recurrent-intensity-model-experiments@main#egg=recurrent-intensity-model-experiments"
     ],
     extras_require={
         "full": [
