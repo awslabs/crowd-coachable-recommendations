@@ -31,23 +31,6 @@ from src.ccrec.models.vae_lightning import vae_main
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--batch_size", default=30, type=int)
-parser.add_argument("--max_seq_length", default=300, type=int)
-parser.add_argument("--model_name", type=str, default="distilbert-base-uncased")
-parser.add_argument("--epochs", default=10, type=int)
-parser.add_argument("--lr", default=2e-5, type=float)
-parser.add_argument("--beta", default=2e-3, type=float)
-parser.add_argument("--alpha", default=1.0, type=float)
-parser.add_argument("--training_method", default="bertmt", type=str)
-parser.add_argument("--dataset", default="msmarco", type=str)
-parser.add_argument("--checkpoint", default=None, type=str)
-parser.add_argument("--training_dataset_dir", default=None, type=str)
-parser.add_argument("--do_validation", default=False, type=bool)
-
-
-args = parser.parse_args()
-
 
 # %%
 # load MS_MARCO data
@@ -331,4 +314,19 @@ def main(opt):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--batch_size", default=30, type=int)
+    parser.add_argument("--max_seq_length", default=300, type=int)
+    parser.add_argument("--model_name", type=str, default="distilbert-base-uncased")
+    parser.add_argument("--epochs", default=10, type=int)
+    parser.add_argument("--lr", default=2e-5, type=float)
+    parser.add_argument("--beta", default=2e-3, type=float)
+    parser.add_argument("--alpha", default=1.0, type=float)
+    parser.add_argument("--training_method", default="bertmt", type=str)
+    parser.add_argument("--dataset", default="msmarco", type=str)
+    parser.add_argument("--checkpoint", default=None, type=str)
+    parser.add_argument("--training_dataset_dir", default=None, type=str)
+    parser.add_argument("--do_validation", default=False, type=bool)
+
+    args = parser.parse_args()
     main(args)

@@ -32,6 +32,7 @@ env_defaults = [
     ("CCREC_DISPLAY_LENGTH", "250", None),
     #
     ("CCREC_INIT_ENV_DONE", "1", ["0", "1"]),
+    ("CCREC_NON_BLOCKING", "1", ["0", "1"]),
 ]
 
 

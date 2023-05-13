@@ -7,6 +7,7 @@ import random
 from torch.cuda.amp import autocast
 import argparse
 import warnings
+import numpy as np
 
 import inspect
 from beir.retrieval.evaluation import EvaluateRetrieval
@@ -170,8 +171,15 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
 # %%
 # generate training data
 def generate_train_data(
-    qids, qrels, ranking_profile, ranking_profile_2=None, num_of_samples_from_model=4
+    qids,
+    qrels,
+    ranking_profile,
+    ranking_profile_2=None,
+    num_of_samples_from_model=4,
+    corpus_key_list=[],
+    rng_seed=None,  # STEP
 ):
+    ranks_rng = np.random.RandomState(rng_seed)
     train_data = dict()
     for qid in qids:
         pids = list(ranking_profile[qid].keys())
@@ -184,6 +192,14 @@ def generate_train_data(
                     break
                 if pid not in pids:
                     pids.append(pid)
+
+        if len(corpus_key_list):
+            pids = pids[:3]
+            while len(pids) < 4:
+                pid = corpus_key_list[ranks_rng.choice(len(corpus_key_list))]
+                if pid not in pids:
+                    pids.append(pid)
+
         random.shuffle(pids)
         pos_pid = pids[0:1]
         neg_pid = pids[1:]
@@ -197,7 +213,11 @@ def generate_train_data(
                     pos_pid = [pid]
                 else:
                     neg_pid.append(pid)
-        train_data[qid] = {"pos_pid": pos_pid, "neg_pid": neg_pid}
+            train_data[qid] = {"pos_pid": pos_pid, "neg_pid": neg_pid}
+        elif len(corpus_key_list):
+            pass  # in new version, skip n/a class
+        else:
+            train_data[qid] = {"pos_pid": pos_pid, "neg_pid": neg_pid}
     return train_data
 
 

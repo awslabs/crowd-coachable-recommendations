@@ -43,18 +43,6 @@ except ImportError:
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--model_name", type=str, default="distilbert-base-uncased")
-parser.add_argument("--model_dir", type=str, default=None)
-parser.add_argument("--batch_size", default=512, type=int)
-parser.add_argument("--model_type", type=str, default="bertmt")
-parser.add_argument("--eval_method", type=str, default="ranking")
-parser.add_argument("--task", type=str, default="msmarco")
-parser.add_argument("--save_name", type=str, default="0")
-
-
-args = parser.parse_args()
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
@@ -181,11 +169,8 @@ def cos_sim(a: torch.Tensor, b: torch.Tensor):
 def ranking_bm25(corpus, queries):
     ranking_profile = {}
     model = BM25()
-    corpus_list = list(corpus.values())
-    query_list = list(queries.values())
-    dataset = corpus_list + query_list
     print("Fitting BM-25 model")
-    model.fit(dataset)
+    model.fit(list(corpus.values()))
     print("Retrieval with BM-25 model")
     queries_ids = list(queries.keys())
     corpus_ids = list(corpus.keys())
@@ -195,7 +180,7 @@ def ranking_bm25(corpus, queries):
             print("processing query: {} | {}".format(step_q, num_queries))
         qid = queries_ids[step_q]
         query_sentence = queries[qid]
-        solution = model.transform(query_sentence, corpus_list)
+        solution = model.transform(query_sentence)
         solution = torch.Tensor(solution)
         ordered_scores, ordering = solution.sort(descending=True)
         ordered_scores, ordering = ordered_scores[0:1001], ordering[0:1001]
@@ -537,4 +522,15 @@ def main(args):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_name", type=str, default="distilbert-base-uncased")
+    parser.add_argument("--model_dir", type=str, default=None)
+    parser.add_argument("--batch_size", default=512, type=int)
+    parser.add_argument("--model_type", type=str, default="bertmt")
+    parser.add_argument("--eval_method", type=str, default="ranking")
+    parser.add_argument("--task", type=str, default="msmarco")
+    parser.add_argument("--save_name", type=str, default="0")
+
+    args = parser.parse_args()
+
     main(args)
