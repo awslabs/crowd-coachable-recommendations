@@ -14,6 +14,7 @@ import numpy as np
 import argparse
 import json
 import warnings
+from collections import Counter
 
 from datasets import Dataset
 
@@ -36,6 +37,8 @@ from src.ccrec.models.bert_mt import _BertMT
 from src.ccrec.models.bbpr import _BertBPR
 from bm_25 import BM25
 
+from ccrec.util.amazon_review_prime_pantry import get_item_df
+
 try:
     from beir.retrieval.evaluation import EvaluateRetrieval
 except ImportError:
@@ -49,7 +52,56 @@ print("Using device:", device)
 
 # %%
 def load_data(task, data_split=None):
-    if task == "ms_marco_full_ranking":
+    if task == "prime_pantry":
+        data_root = (
+            "/".join(os.path.realpath(__file__).split("/")[:-2])
+            + "/data/amazon_review_prime_pantry"
+        )
+        print("data_root", data_root)
+        item_df, _ = get_item_df(data_root, shorten_brand_name=False)
+        corpus = item_df["TITLE"].to_dict()
+        queries = item_df["TITLE"].to_dict()
+        block_dict = {
+            k: item_df[item_df["BRAND"] == v["BRAND"]].index.tolist()
+            for k, v in item_df.iterrows()
+        }
+        reviews = pd.read_json(f"{data_root}/Prime_Pantry.json.gz", lines=True)
+        reviews = reviews[reviews["asin"].isin(item_df.index)].copy()
+
+        reviews["past_asin"] = (
+            reviews.sort_values("unixReviewTime", kind="stable")
+            .groupby("reviewerID")["asin"]
+            .shift(1)
+        )
+
+        review_bigram = reviews.dropna(subset=["asin", "past_asin"])
+        review_bigram = review_bigram[
+            review_bigram.apply(
+                lambda x: x["past_asin"] not in block_dict[x["asin"]],
+                axis=1,
+            )
+        ]
+
+        qrels = review_bigram.groupby("past_asin")["asin"].apply(
+            lambda x: Counter(x).most_common(3)
+        )
+        qrels = {
+            k: ({kk: vv for kk, vv in qrels.loc[k]} if k in qrels.index else {})
+            for k in queries.keys()
+        }
+
+        qids_split = [
+            item_df.sample(frac=1, random_state=42).index.tolist()[
+                i
+                * int(np.ceil(len(item_df) / 4)) : (i + 1)
+                * int(np.ceil(len(item_df) / 4))
+            ]
+            for i in range(4)
+        ]
+        print([x[:5] for x in qids_split])
+        return corpus, queries, qrels, block_dict, qids_split, item_df["landingImage"]
+
+    elif task == "ms_marco_full_ranking":
         corpus = pd.read_csv(
             "data/ms_marco/collection.tsv",
             sep="\t",
@@ -190,7 +242,7 @@ def ranking_bm25(corpus, queries):
     return ranking_profile
 
 
-def ranking(corpus, queries, embedding_func, batch_size):
+def ranking(corpus, queries, embedding_func, batch_size, block_dict=None):
     embedding_dim = 768
     num_queries, num_passages = len(queries), len(corpus)
     num_query_batches = math.ceil(num_queries / batch_size)
@@ -220,9 +272,15 @@ def ranking(corpus, queries, embedding_func, batch_size):
         ranking_matrix[
             0:num_queries, step * batch_size : (step * batch_size + num_of_pasg)
         ] = scores.cpu()
+    if block_dict is not None:
+        print("using block_dict")
     for step, qid in enumerate(queries_ids):
         # print(step, "|", num_queries)
         scores = ranking_matrix[step]
+        if block_dict is not None:
+            block_ind = pd.Index(corpus_ids).get_indexer(block_dict[qid])
+            assert -1 not in block_ind, "block id not found"
+            scores[block_ind] = -1e6
         scores = scores.cuda()
         ordered_scores, ordering = scores.sort(descending=True)
         ordered_scores, ordering = ordered_scores[0:1001], ordering[0:1001]

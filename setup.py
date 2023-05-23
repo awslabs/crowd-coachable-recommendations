@@ -27,6 +27,7 @@ setup(
         "pytest",
         "flaky",
         "tensorboard",
+        "pytorch-lightning < 2.0.0",
     ],
     extras_require={
         "full": [

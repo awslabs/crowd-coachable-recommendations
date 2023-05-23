@@ -48,7 +48,13 @@ from ms_marco_eval import ranking, load_data
     DRYRUN,
 ) = parse_al_args()
 
-corpus, queries, qrels = load_data(DATA_NAME)
+corpus, queries, qrels, *extra = load_data(DATA_NAME)
+
+if len(extra):
+    assert not len(qids_split), "expect splits from load_data"
+    block_dict, qids_split, landingImage = extra
+else:
+    block_dict = landingImage = None
 
 print("total num queries", len(np.hstack(qids_split)))
 print(
@@ -111,7 +117,7 @@ def generate_ranking_profile(model, model_name, corpus, queries):
             outputs = model(**tokens, output_step=embedding_type)
             return outputs
 
-    ranking_profile = ranking(corpus, queries, embedding_func, batch_size)
+    ranking_profile = ranking(corpus, queries, embedding_func, batch_size, block_dict)
 
     return ranking_profile
 
@@ -155,7 +161,21 @@ def filter_string(text):
     return new_text[: int(os.environ["CCREC_DISPLAY_LENGTH"])]
 
 
-header = ["query", "passage-1", "passage-2", "passage-3", "passage-4"]
+header = [
+    "query",
+    "passage-1",
+    "passage-2",
+    "passage-3",
+    "passage-4",
+    "qid",
+    "pid-1",
+    "pid-2",
+    "pid-3",
+    "pid-4",
+]
+if landingImage is not None:
+    header = header + ["img-q", "img-1", "img-2", "img-3", "img-4"]
+
 rows = []
 
 id_track = dict()
@@ -181,7 +201,10 @@ for qid in ranking_profile:
     query_text = queries[qid]
     passages = [filter_string(corpus[pid]) for pid in cands]
 
-    row = [query_text, *passages]
+    row = [query_text] + passages + [f"q_{qid}"] + [f"p_{c}" for c in cands]
+    if landingImage is not None:
+        row = row + [landingImage[qid]] + [landingImage[c] for c in cands]
+
     rows.append(row)
     id_track[query_text] = "q_{}".format(qid)
     for pid, passage in zip(cands, passages):
@@ -194,13 +217,18 @@ request_orig = pd.DataFrame(rows, columns=header)
 print(request_orig.iloc[0])
 request_orig.to_csv(f"{current_working_dir}/request_orig.csv", index=False)
 
+
+def permute_row(row, rng):
+    ind = rng.permutation(4)
+    out = [row[0]] + [row[1 + i] for i in ind] + [row[5]] + [row[6 + i] for i in ind]
+    if len(row) > 10:
+        out = out + [row[10]] + [row[11 + i] for i in ind]
+    return out
+
+
 rng = np.random.RandomState(REPEAT_SEED)
 request_perm = pd.DataFrame(
-    [
-        [row[0]] + rng.permutation(row[1:]).tolist()
-        for i in range(N_REPEATS)
-        for row in rows
-    ],
+    [permute_row(row, rng) for i in range(N_REPEATS) for row in rows],
     columns=header,
 )
 print(request_perm.iloc[0])

@@ -103,7 +103,9 @@ def training(
 
 # %%
 # evaluate and generate ranking profile
-def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir):
+def generate_ranking_profile(
+    model, model_name, corpus, queries, qrels, save_dir, block_dict=None
+):
     batch_size = 512
 
     _gpu_ids = [i for i in range(torch.cuda.device_count())]
@@ -155,7 +157,7 @@ def generate_ranking_profile(model, model_name, corpus, queries, qrels, save_dir
             outputs = model(**tokens, output_step=embedding_type)
             return outputs
 
-    ranking_profile = ranking(corpus, queries, embedding_func, batch_size)
+    ranking_profile = ranking(corpus, queries, embedding_func, batch_size, block_dict)
 
     evaluator = EvaluateRetrieval(None)
     mrr = evaluator.evaluate_custom(

@@ -26,8 +26,8 @@ def get_item_df(
     data_root="data/amazon_review_prime_pantry",
     meta_file="meta_Prime_Pantry.json.gz",
     landingImageURL_file="landingImageURL.csv.gz",
-    landingImageURL_folder="landingImage",
-    shorten_brand_name=True,
+    landingImageURL_folder=None,  # "landingImage",
+    shorten_brand_name=False,
     return_tfidf_csr=True,
     nrows=None,
 ):
@@ -50,9 +50,11 @@ def get_item_df(
     )
     item_df = item_df[item_df["landingImage"].notnull()]
     item_df = item_df[item_df["landingImage"].apply(lambda x: x.endswith(".jpg"))]
-    item_df["landingImage"] = [
-        f"{data_root}/{landingImageURL_folder}/{x}.jpg" for x in item_df.index.values
-    ]
+    if landingImageURL_folder is not None:
+        item_df["landingImage"] = [
+            f"{data_root}/{landingImageURL_folder}/{x}.jpg"
+            for x in item_df.index.values
+        ]
 
     tfidf_fit = TfidfVectorizer().fit(item_df["TITLE"].tolist())
     tfidf_csr = tfidf_fit.transform(item_df["TITLE"].tolist())
