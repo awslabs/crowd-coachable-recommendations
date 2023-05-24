@@ -14,9 +14,8 @@ def parse_al_args():
         "--path_to_ranking_profile_bm25",
         default="",
         help=(
-            "path_to_ranking_profile_bm25 is required."
-            " For NQ, path_to_ranking_profile_bm25 can be obtained by BM25"
-            " with k1=0.9 and b=0.4."
+            "path_to_ranking_profile_bm25 is required,"
+            " which can be obtained by BM25 with k1=0.9 and b=0.4."
         ),
     )
     parser.add_argument("--STEP", help="STEP is required, starting with 0")
@@ -25,9 +24,7 @@ def parse_al_args():
     parser.add_argument(
         "--path_to_splits",
         default="",
-        help=(
-            "required to find qids_split; train_data.pt or train_data_human_response.pt"
-        ),
+        help="find qids_split by train_data.pt or train_data_human_response.pt",
     )
     parser.add_argument("--number_of_qid_split_batch", default=4, type=int)
     parser.add_argument("--NUM_EPOCHS", default=10, type=int)

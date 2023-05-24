@@ -80,43 +80,25 @@ def generate_ranking_profile(model, model_name, corpus, queries):
         "return_tensors": "pt",
     }
 
-    if model_name == "vae":  # legacy
-        tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-        model = (
-            model.item_tower
-            if hasattr(model, "item_tower")
-            else model.model.item_tower
-            if hasattr(model, "model")
-            else model
-        )
-        model.eval()
-        model = DataParallel(model.cuda(), device_ids=_gpu_ids).cache_replicas()
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = (
+        model.item_tower
+        if hasattr(model, "item_tower")
+        else model.model.item_tower
+        if hasattr(model, "model")
+        else model
+    )
+    model.eval()
+    model = DataParallel(model.cuda(), device_ids=_gpu_ids).cache_replicas()
 
-        def embedding_func(x):
-            tokens = tokenizer(x, **tokenizer_kw)
-            outputs = model(**tokens, output_step=os.environ["CCREC_EMBEDDING_TYPE"])
-            return outputs
+    embedding_type = os.environ["CCREC_EMBEDDING_TYPE"]
+    if embedding_type != "mean_pooling":
+        warnings.warn(f"{embedding_type} != mean_pooling for contriever models")
 
-    elif "contriever" in model_name:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = (
-            model.item_tower
-            if hasattr(model, "item_tower")
-            else model.model.item_tower
-            if hasattr(model, "model")
-            else model
-        )
-        model.eval()
-        model = DataParallel(model.cuda(), device_ids=_gpu_ids).cache_replicas()
-
-        embedding_type = os.environ["CCREC_EMBEDDING_TYPE"]
-        if embedding_type != "mean_pooling":
-            warnings.warn(f"{embedding_type} != mean_pooling for contriever models")
-
-        def embedding_func(x):
-            tokens = tokenizer(x, **tokenizer_kw)
-            outputs = model(**tokens, output_step=embedding_type)
-            return outputs
+    def embedding_func(x):
+        tokens = tokenizer(x, **tokenizer_kw)
+        outputs = model(**tokens, output_step=embedding_type)
+        return outputs
 
     ranking_profile = ranking(corpus, queries, embedding_func, batch_size, block_dict)
 

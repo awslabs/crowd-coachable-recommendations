@@ -2,9 +2,7 @@ import os, warnings, dataclasses, collections, itertools, time, functools, typin
 import pandas as pd, numpy as np, scipy.sparse as sps
 from pytorch_lightning.loggers import TensorBoardLogger
 from ccrec.util import merge_unique
-import rime_lite
 from rime_lite.dataset import Dataset
-from rime_lite.util import indices2csr, perplexity, matrix_reindex, cached_property
 
 
 def create_zero_shot(
@@ -106,7 +104,7 @@ def create_reranking_dataset(
             )
         )
 
-    return rime_lite.dataset.Dataset(
+    return Dataset(
         user_df,
         item_df,
         event_df,
@@ -180,68 +178,6 @@ def _sanitize_inputs(event_df, user_df, item_df, clear_future_events=None):
     return event_df
 
 
-def query_least_certain_users(batch_size):
-    def fn(user_df, event_df):
-        user_context = (
-            event_df.join(user_df, on="USER_ID")
-            .query("TIMESTAMP < TEST_START_TIME")
-            .groupby("USER_ID")["ITEM_ID"]
-            .first()
-        )
-
-        least_certain_users = (
-            event_df.join(user_context.to_frame("given"), on="USER_ID")
-            .query("given != ITEM_ID")
-            .groupby("USER_ID")["VALUE"]
-            .sum()
-            .reindex(user_df.index, fill_value=0)
-            .sort_values()
-            .iloc[:batch_size]
-        )
-
-        return (
-            least_certain_users.to_frame("_value_sum")
-            .join(user_df)
-            .set_index("TEST_START_TIME", append=True)
-        )
-
-    return fn
-
-
-def _sort_or_shuffle(request, _sort_candidates):
-    request = request.assign(
-        _reverse_index=request["_group"].apply(
-            lambda x: np.argsort(np.asarray(x)[np.asarray(x) != -1], kind="stable")
-            if _sort_candidates
-            else np.random.permutation(len(x))
-        )
-    )
-    return request.assign(
-        _group=lambda df: df.apply(
-            lambda x: np.asarray(x["_group"])[x["_reverse_index"]].tolist(), axis=1
-        ),
-        cand_items=lambda df: df.apply(
-            lambda x: np.asarray(x["cand_items"])[x["_reverse_index"]].tolist(), axis=1
-        ),
-        cand_titles=lambda df: df.apply(
-            lambda x: np.asarray(x["cand_titles"])[x["_reverse_index"]].tolist(), axis=1
-        ),
-    ).drop("_reverse_index", axis=1)
-
-
-def _get_request_perplexity(request):
-    ind, cnt = np.unique(np.hstack(request["cand_items"]), return_counts=True)
-    return perplexity(cnt)
-
-
-def _expand_na_class(request):
-    _expand_cand_items = lambda x: list(x["cand_items"]) + [x["_hist_items"][-1]]
-    return request.assign(
-        cand_items=request.apply(_expand_cand_items, axis=1),
-        _group=request["_group"].apply(lambda x: x + [-1]),
-    )
-
-
 def parse_response(response, step_idx=None):
     response = _sanitize_response(response)
     new_events = response["cand_items"].explode().to_frame("ITEM_ID")
@@ -255,15 +191,3 @@ def parse_response(response, step_idx=None):
         new_events["step_idx"] = step_idx  # for visualization only
 
     return new_events.reset_index(drop=True)
-
-
-def _evaluate_response(response):
-    data = np.vstack(response["multi_label"])
-    group = np.vstack(response["_group"])
-
-    out = {}
-    for group_id in np.unique(group):
-        pos = data[group == group_id].sum()
-        imp = (group == group_id).sum()
-        out[str(group_id)] = pos / imp
-    return out

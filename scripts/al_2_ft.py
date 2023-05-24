@@ -32,7 +32,6 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 
 from transformers import AutoTokenizer, AutoModel
 from ccrec.models.bert_mt import bmt_main
-from ccrec.models.bbpr import bbpr_main
 from ccrec.models.bert_mt import _BertMT
 from ccrec.models.bbpr import _BertBPR
 from ccrec.util.data_parallel import DataParallel
@@ -94,11 +93,7 @@ def training(
     _alpha = 1.0
     _beta = 2e-3
 
-    train_main = globals()[
-        os.environ.get("CCREC_TRAIN_MAIN", "bmt_main")
-    ]  # or bbpr_main
-
-    _, _, model = train_main(
+    _, _, model = bmt_main(
         item_df,
         expl_response,
         expl_response,

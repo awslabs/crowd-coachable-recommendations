@@ -19,8 +19,6 @@ from ccrec.models.bbpr import _BertBPR
 from ccrec.util.data_parallel import DataParallel
 
 from train_bmt_msmarco import (
-    load_corpus,
-    load_query,
     load_item_df,
     load_user_df,
     load_expl_response,
@@ -98,43 +96,25 @@ def generate_ranking_profile(
         "return_tensors": "pt",
     }
 
-    if model_name == "vae":
-        tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-        model = (
-            model.item_tower
-            if hasattr(model, "item_tower")
-            else model.model.item_tower
-            if hasattr(model, "model")
-            else model
-        )
-        model.eval()
-        model = DataParallel(model.cuda(), device_ids=_gpu_ids).cache_replicas()
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = (
+        model.item_tower
+        if hasattr(model, "item_tower")
+        else model.model.item_tower
+        if hasattr(model, "model")
+        else model
+    )
+    model.eval()
+    model = DataParallel(model.cuda(), device_ids=_gpu_ids).cache_replicas()
 
-        def embedding_func(x):
-            tokens = tokenizer(x, **tokenizer_kw)
-            outputs = model(**tokens, output_step=os.environ["CCREC_EMBEDDING_TYPE"])
-            return outputs
+    embedding_type = os.environ["CCREC_EMBEDDING_TYPE"]
+    if embedding_type != "mean_pooling":
+        warnings.warn(f"{embedding_type} != mean_pooling for contriever models")
 
-    elif "contriever" in model_name:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = (
-            model.item_tower
-            if hasattr(model, "item_tower")
-            else model.model.item_tower
-            if hasattr(model, "model")
-            else model
-        )
-        model.eval()
-        model = DataParallel(model.cuda(), device_ids=_gpu_ids).cache_replicas()
-
-        embedding_type = os.environ["CCREC_EMBEDDING_TYPE"]
-        if embedding_type != "mean_pooling":
-            warnings.warn(f"{embedding_type} != mean_pooling for contriever models")
-
-        def embedding_func(x):
-            tokens = tokenizer(x, **tokenizer_kw)
-            outputs = model(**tokens, output_step=embedding_type)
-            return outputs
+    def embedding_func(x):
+        tokens = tokenizer(x, **tokenizer_kw)
+        outputs = model(**tokens, output_step=embedding_type)
+        return outputs
 
     ranking_profile = ranking(corpus, queries, embedding_func, batch_size, block_dict)
 
@@ -155,8 +135,7 @@ def generate_train_data(
     qids,
     qrels,
     ranking_profile,
-    ranking_profile_2=None,
-    num_of_samples_from_model=4,
+    ranking_profile_2,  # bm25
     corpus_key_list=[],
     rng_seed=None,  # STEP
 ):
@@ -164,17 +143,16 @@ def generate_train_data(
     train_data = dict()
     for qid in qids:
         pids = list(ranking_profile[qid].keys())
-        pids = pids[0:4]
-        if ranking_profile_2 is not None:
-            pids_2 = list(ranking_profile_2[qid].keys())
-            pids = pids[0:num_of_samples_from_model]
-            for pid in pids_2:
-                if len(pids) == 4:
-                    break
-                if pid not in pids:
-                    pids.append(pid)
+        pids = pids[0:2]
 
-        if len(corpus_key_list):
+        pids_2 = list(ranking_profile_2[qid].keys())
+        for pid in pids_2:
+            if len(pids) == 4:
+                break
+            if pid not in pids:
+                pids.append(pid)
+
+        if len(corpus_key_list):  # add a random choice for attention checks
             pids = pids[:3]
             while len(pids) < 4:
                 pid = corpus_key_list[ranks_rng.choice(len(corpus_key_list))]
@@ -199,38 +177,6 @@ def generate_train_data(
             pass  # in new version, skip n/a class
         else:
             train_data[qid] = {"pos_pid": pos_pid, "neg_pid": neg_pid}
-    return train_data
-
-
-def generate_train_data_with_accu_level(train_data, accu_level, qrels):
-    num_of_correct_data = 0
-    qids_correct_all = []
-    for qid, item in train_data.items():
-        labels = list(qrels[str(qid)].keys())
-        pos_pid = item["pos_pid"]
-        neg_pid = item["neg_pid"]
-        if any(pid in labels for pid in pos_pid):
-            num_of_correct_data += 1
-            qids_correct_all.append(qid)
-    print(
-        "number of correct samples: {} / {}".format(
-            num_of_correct_data, len(train_data)
-        )
-    )
-    random.shuffle(qids_correct_all)
-    number_of_wrong_data = int(num_of_correct_data * (1 - accu_level))
-    qids_wrong = qids_correct_all[0:number_of_wrong_data]
-
-    for qid, item in train_data.items():
-        if qid not in qids_wrong:
-            continue
-        pos_pid = item["pos_pid"]
-        neg_pid = item["neg_pid"]
-        random.shuffle(neg_pid)
-        pids = neg_pid + pos_pid
-        pos_pid = [pids[0]]
-        neg_pid = pids[1:]
-        train_data[qid] = {"pos_pid": pos_pid, "neg_pid": neg_pid}
     return train_data
 
 
