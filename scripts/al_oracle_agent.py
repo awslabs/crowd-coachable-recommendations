@@ -45,7 +45,6 @@ def training(
     train_dataset,
     epochs,
     model_checkpoint,
-    save_dir,
     corpus,
     queries,
     model_selection,
@@ -54,35 +53,20 @@ def training(
     user_df = load_user_df(train_dataset)
     expl_response = load_expl_response(train_dataset)
 
-    if model_selection == "vae":
-        training_arguments = {
-            "lr": 2e-5,
-            "model_name": "distilbert-base-uncased",
-            "max_length": int(os.environ.get("CCREC_MAX_LENGTH", 300)),
-            "pretrained_checkpoint": model_checkpoint,
-            "do_validation": False,
-            "log_directory": save_dir,
-        }
-    elif "contriever" in model_selection:
-        training_arguments = {
-            "lr": 2e-5,
-            "model_name": model_selection,
-            "max_length": int(os.environ.get("CCREC_MAX_LENGTH", 300)),
-            "pretrained_checkpoint": None,
-            "do_validation": False,
-            "log_directory": save_dir,
-        }
+    training_arguments = {
+        "lr": 2e-5,
+        "model_name": model_selection,
+        "max_length": int(os.environ.get("CCREC_MAX_LENGTH", 300)),
+        "pretrained_checkpoint": None,
+        "do_validation": False,
+    }
 
     _batch_size = 30
     _epochs = epochs
     _alpha = 1.0
     _beta = 2e-3
 
-    train_main = globals()[
-        os.environ.get("CCREC_TRAIN_MAIN", "bmt_main")
-    ]  # or bbpr_main
-
-    _, _, model = train_main(
+    _, _, model = bmt_main(
         item_df,
         expl_response,
         expl_response,

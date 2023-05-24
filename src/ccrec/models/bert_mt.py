@@ -20,7 +20,7 @@ from ccrec.models.bbpr import (
 )
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 from ccrec.models.vae_lightning import VAEData
-import rime_lite
+from rime_lite.metrics import evaluate_item_rec
 from ccrec.env import create_reranking_dataset
 from ccrec.models.item_tower import NaiveItemTower
 from ccrec.util import get_training_precision
@@ -47,7 +47,6 @@ class _BertMT(_BertBPR):
         model_cls_name="VAEPretrainedModel",
         tokenizer=None,
         tokenizer_kw={},
-        **bmt_kw,
     ):
         super(_BertBPR, self).__init__()
         if valid_n_negatives is None:
@@ -375,6 +374,6 @@ def bmt_main(
 
     gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
     reranking_scores = bmt.transform(gnd) + gnd.prior_score
-    metrics = rime_lite.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+    metrics = evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 
     return metrics, reranking_scores, bmt

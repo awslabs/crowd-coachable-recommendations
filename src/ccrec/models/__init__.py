@@ -1,7 +1,7 @@
 import dataclasses
 import numpy as np
-import rime
-from rime.util import LazyScoreModel, auto_cast_lazy_score
+import rime_lite
+from rime_lite.util import LazyScoreModel, auto_cast_lazy_score
 
 
 @dataclasses.dataclass
@@ -11,7 +11,7 @@ class EmpiricalAverageModel(LazyScoreModel):
 
     def fit(self, D=None):
         if D is not None:
-            V = rime.dataset.Dataset(
+            V = rime_lite.dataset.Dataset(
                 D.user_df, D.item_df, D.event_df, sample_with_prior=1
             )
             prior_score = auto_cast_lazy_score(V.prior_score).apply(
