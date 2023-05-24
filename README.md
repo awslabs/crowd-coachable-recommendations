@@ -10,3 +10,6 @@ The only change between the two notebooks is `DATA_NAME="nq"` in the configurati
 
 Crowd-sourcing experiments are run by calling `scripts/al_0_rank.py`, `scripts/al_1_em.py`, `scripts/al_2_ft.py` sequentially for each batch of the labeling tasks.
 Human feedback is provided between al_0_rank and al_1_em by uploading `request_perm.csv` and downloading `human_response.csv` in the same data-step folder.
+
+All experiments are conducted using NVidia A10G GPU machines with 4-GPU parallelization. Runtime is usually less than 3 hours per active learning step. Human tasks are usually completed under 45 minutes.
+
