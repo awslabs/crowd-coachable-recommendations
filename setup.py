@@ -19,21 +19,9 @@ setup(
     install_requires=[
         "datasets >= 2.4.0",
         "shap >= 0.41.0",
-        (
-            "recurrent-intensity-model-experiments @ "
-            "git+https://github.com/awslabs/recurrent-intensity-model-experiments"
-            "@main#egg=recurrent-intensity-model-experiments"
-        ),
         "pytest",
         "flaky",
         "tensorboard",
         "pytorch-lightning < 2.0.0",
     ],
-    extras_require={
-        "full": [
-            "dgl"
-            if get_cuda_version() is None
-            else "dgl-cu{}{}".format(*get_cuda_version()),
-        ]
-    },
 )

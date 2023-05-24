@@ -18,12 +18,11 @@ from ccrec.models.bbpr import (
     default_random_split,
     _LitValidated,
 )
-from ccrec.models import vae_models
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 from ccrec.models.vae_lightning import VAEData
-import rime
+import rime_lite
 from ccrec.env import create_reranking_dataset
-from ccrec.models.item_tower import VAEItemTower, NaiveItemTower
+from ccrec.models.item_tower import NaiveItemTower
 from ccrec.util import get_training_precision
 from transformers import get_linear_schedule_with_warmup, AutoModel, AutoTokenizer
 from pytorch_lightning.callbacks import LearningRateMonitor
@@ -72,22 +71,14 @@ class _BertMT(_BertBPR):
         self.training_prior_fcn = training_prior_fcn
 
         self.model_name = model_name
-        if "contriever" in model_name:
-            self.item_tower = NaiveItemTower(
-                AutoModel.from_pretrained(model_name),
-                torch.nn.LayerNorm(
-                    768, elementwise_affine=True
-                ),  # not used in facebook/contriever models
-                tokenizer=tokenizer,
-                tokenizer_kw=tokenizer_kw,
-            )
-        else:  # VAEItemTower with distilbert
-            vae_model = getattr(vae_models, model_cls_name).from_pretrained(model_name)
-            if hasattr(vae_model, "set_beta"):
-                vae_model.set_beta(beta)
-            self.item_tower = VAEItemTower(
-                vae_model, tokenizer=tokenizer, tokenizer_kw=tokenizer_kw
-            )
+        self.item_tower = NaiveItemTower(
+            AutoModel.from_pretrained(model_name),
+            torch.nn.LayerNorm(
+                768, elementwise_affine=True
+            ),  # not used in facebook/contriever models
+            tokenizer=tokenizer,
+            tokenizer_kw=tokenizer_kw,
+        )
 
         if pretrained_checkpoint is not None:
             print("Load pre-trained model...")
@@ -115,10 +106,9 @@ class _BertMT(_BertBPR):
     def training_and_validation_step(self, batch, batch_idx):
         ijw, inputs = batch
         ft_loss = super().training_and_validation_step(ijw, batch_idx)
-        if isinstance(self.item_tower, VAEItemTower):
-            ct_loss = self.item_tower(**inputs, output_step="dict")[0]
-        else:
-            ct_loss = np.array(0.0)  # ct loss not implemented for contriever models
+        ct_loss = np.array(
+            0.0
+        )  # corpus-tuning (vae) loss not implemented for contriever models
         return (
             1 - self.alpha
         ) / self.ct_cycles * ct_loss.mean() + self.alpha / self.ft_cycles * ft_loss.mean()
@@ -182,7 +172,7 @@ class _DataMT(_DataModule):
             batch_size,
             valid_batch_size,
         )
-        self._ct = VAEData(
+        self._ct = VAEData(  # TODO: remove VAEData
             item_df, tokenizer, vae_batch_size, do_validation, **tokenizer_kw
         )
         self.training_data.update(
@@ -385,6 +375,6 @@ def bmt_main(
 
     gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
     reranking_scores = bmt.transform(gnd) + gnd.prior_score
-    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+    metrics = rime_lite.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 
     return metrics, reranking_scores, bmt

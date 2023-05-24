@@ -1,9 +1,7 @@
-/Brano_data
 /lightning_logs/
 /logs/
 /.vscode
 /data
-/msmarco_VAE_model_prime_beta_0.002/
 .idea
 sftp-config.json
 *~

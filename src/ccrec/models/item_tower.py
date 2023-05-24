@@ -1,6 +1,6 @@
 import torch, pandas as pd, numpy as np, functools, os, collections
 from datasets import Dataset, DatasetDict
-from rime.util import auto_device
+from rime_lite.util import auto_device
 from ccrec.util.data_parallel import DataParallel
 import warnings
 
@@ -146,63 +146,6 @@ class NaiveItemTower(ItemTowerBase):
             )
             return sentence_embeddings  # unnormalized
 
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support {input_step}->{output_step} forward"
-        )
-
-
-class VAEItemTower(ItemTowerBase):
-    """support reconstruction of (masked) inputs as well as cls/embedding outputs"""
-
-    def __init__(self, ae_model, **kw):
-        super().__init__(ae_model, **kw)
-        self.ae_model = ae_model
-        self.cls_to_embedding = ae_model.cls_to_embedding
-
-    def get_sample_param(self):
-        return self.ae_model.get_sample_param()
-
-    def set_sample_param(self, sample):
-        self.ae_model.set_sample_param(sample)
-
-    def forward(
-        self,
-        cls=None,
-        text=None,
-        input_step="inputs",
-        output_step="embedding",
-        **inputs,
-    ):
-        if input_step == "text":
-            inputs = self.text_to_inputs(text=text)
-            input_step = "inputs"
-
-        if output_step == "embedding":
-            output_step = os.environ["CCREC_EMBEDDING_TYPE"]
-            warnings.warn(
-                f"{self.__class__} inferring output_step from CCREC_EMBEDDING_TYPE as {output_step}"
-            )
-
-        if input_step == "inputs":
-            inputs = {k: v.to(self.ae_model.device) for k, v in inputs.items()}
-            if output_step == "cls":
-                cls = self.ae_model(**inputs, return_cls=True)
-                return cls
-            if output_step == "mean":
-                mean, std = self.ae_model(
-                    **inputs, return_mean_std=True
-                )  # unnormalized mean
-                return mean
-            if output_step == "mean_layer_norm":
-                return self.ae_model(
-                    **inputs, return_mean_layer_norm=True
-                )  # normalized embedding
-            elif output_step == "dict":
-                return self.ae_model(**inputs, return_dict=True)  # ct loss and logits
-
-        elif input_step == "cls":
-            if output_step == "mean_layer_norm":
-                return self.cls_to_embedding(cls)
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support {input_step}->{output_step} forward"
         )

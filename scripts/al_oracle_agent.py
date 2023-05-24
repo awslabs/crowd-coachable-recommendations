@@ -12,16 +12,11 @@ import numpy as np
 import inspect
 from beir.retrieval.evaluation import EvaluateRetrieval
 
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
-
 from transformers import AutoTokenizer, AutoModel
-from src.ccrec.models.bert_mt import bmt_main
-from src.ccrec.models.bbpr import bbpr_main
-from src.ccrec.models.bert_mt import _BertMT
-from src.ccrec.models.bbpr import _BertBPR
-from src.ccrec.util.data_parallel import DataParallel
+from ccrec.models.bert_mt import bmt_main
+from ccrec.models.bert_mt import _BertMT
+from ccrec.models.bbpr import _BertBPR
+from ccrec.util.data_parallel import DataParallel
 
 from train_bmt_msmarco import (
     load_corpus,
@@ -259,115 +254,3 @@ def combine_train_data(train_data_pre, train_data_new):
     for qid, item in train_data_new.items():
         train_data_pre[qid] = item
     return train_data_pre
-
-
-# %%
-# main function
-def main():
-    corpus, queries, qrels = load_data(DATA_NAME)
-    qids_all = list(qrels.keys())
-    num_of_train_data = len(qids_all)
-    qids_split = [
-        qids_all[x : x + BATCH_SIZE] for x in range(0, num_of_train_data, BATCH_SIZE)
-    ]
-    number_of_qid_split_batch = len(qids_split)
-
-    print("Accuracy level:", ACCURACY_LEVEL)
-    print("Total number of iterations:", number_of_qid_split_batch * N_STEPS)
-
-    # Load bm25 ranking profile
-    bm25_dir = (
-        "{}_results_oracle_agent_{}/data_iteration_0/ranking_profile_bm25.pt".format(
-            DATA_NAME, ACCURACY_LEVEL
-        )
-    )
-    ranking_profile_bm25 = torch.load(bm25_dir)
-
-    # Load initial model
-    if MODEL_NAME == "vae":
-        model_init_dir = "{}_results_oracle_agent_{}/data_iteration_0/model/checkpoints/epoch=4-step=20800.ckpt".format(
-            DATA_NAME, ACCURACY_LEVEL
-        )
-        state = torch.load(model_init_dir)
-        model = _BertMT(None, model_name="distilbert-base-uncased")
-        model.load_state_dict(state["state_dict"])
-    elif "contriever" in MODEL_NAME:
-        model_init_dir = None
-        model = _BertBPR(None, model_name="facebook/contriever")
-
-    for step_outer in range(N_STEPS):
-        for step_inner in range(number_of_qid_split_batch):
-            step = int(step_outer * number_of_qid_split_batch + step_inner)
-            previous_working_dir = (
-                "{}_results_oracle_agent_{}/data_iteration_{}".format(
-                    DATA_NAME, ACCURACY_LEVEL, step - 1
-                )
-            )
-            current_working_dir = "{}_results_oracle_agent_{}/data_iteration_{}".format(
-                DATA_NAME, ACCURACY_LEVEL, step
-            )
-
-            if not os.path.exists(current_working_dir):
-                os.makedirs(current_working_dir)
-
-            # generate ranking profile
-            print("Generate ranking profile at step:", step)
-            save_dir = os.path.join(current_working_dir, "ranking_profile.pt")
-            if os.path.isfile(save_dir):
-                ranking_profile = torch.load(save_dir)
-            else:
-                with autocast():
-                    ranking_profile = generate_ranking_profile(
-                        model, MODEL_NAME, corpus, queries, qrels, save_dir
-                    )
-
-            # generate training data
-            print("Generate training data at step:", step)
-
-            num_of_samples_from_model = 2
-            print("using number of samples from model:", num_of_samples_from_model)
-            train_data_oracle = generate_train_data(
-                qids_split[step],
-                qrels,
-                ranking_profile,
-                ranking_profile_bm25,
-                num_of_samples_from_model,
-            )
-
-            train_data = generate_train_data_with_accu_level(
-                train_data_oracle, ACCURACY_LEVEL, qrels
-            )
-
-            if step > 0:
-                train_data_prev_dir = os.path.join(
-                    previous_working_dir, "training_data.pt"
-                )
-                train_data_prev = torch.load(train_data_prev_dir)
-                train_data = combine_train_data(train_data_prev, train_data)
-
-            train_data_dir = os.path.join(current_working_dir, "training_data.pt")
-            torch.save(train_data, train_data_dir)
-
-            # train model
-            print("Training model at step:", step)
-            print("Number of training data:", len(train_data))
-            save_train_dir = "al_oracle_agent_{}_{}".format(step, ACCURACY_LEVEL)
-            model = training(
-                train_data,
-                NUM_EPOCHS,
-                model_checkpoint=model_init_dir,
-                save_dir=save_train_dir,
-                corpus=corpus,
-                queries=queries,
-                model_selection=MODEL_NAME,
-            )
-
-    save_dir = os.path.join(current_working_dir, "ranking_profile_final.pt")
-    with autocast():
-        ranking_profile = generate_ranking_profile(
-            model, MODEL_NAME, corpus, queries, qrels, save_dir
-        )
-
-
-if __name__ == "__main__":
-    main()

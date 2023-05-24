@@ -1,6 +1,6 @@
 import collections, contextlib
 import numpy as np
-from rime.util import auto_device
+from rime_lite.util import auto_device
 import os, torch, warnings
 
 

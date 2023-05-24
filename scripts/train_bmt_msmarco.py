@@ -15,19 +15,11 @@ import json
 import math
 import inspect
 
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
-
 from beir import util
 from beir.datasets.data_loader import GenericDataLoader
 import pathlib
 
 from transformers import AutoTokenizer, AutoModel
-from src.ccrec.models.bert_mt import bmt_main
-from src.ccrec.models.bbpr import bbpr_main
-from src.ccrec.models.vae_training import VAE_training
-from src.ccrec.models.vae_lightning import vae_main
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -222,111 +214,3 @@ def load_item_df_unsupervised_learning(data_name):
     item_df = pd.DataFrame({"TITLE": title_all})
     item_df = item_df.sample(frac=0.5)
     return item_df
-
-
-def main(opt):
-    _batch_size = opt.batch_size
-    _max_seq_length = opt.max_seq_length
-    _model_name = opt.model_name
-    _epochs = opt.epochs
-    _lr = opt.lr
-    _beta = opt.beta
-    _alpha = opt.alpha
-    _training_method = opt.training_method
-    _training_dataset_dir = opt.training_dataset_dir
-    _checkpoint = opt.checkpoint
-    _do_validation = opt.do_validation
-    _dataset = opt.dataset
-
-    if _training_method == "bertbpr" or _training_method == "bertmt":
-        corpus, queries = load_data(task=_dataset)
-
-    if _training_method == "bertbpr":
-        if _training_dataset_dir is None:
-            dataset = load_training_data()
-        else:
-            dataset = load_training_data_from_dir(_training_dataset_dir)
-        item_df = load_item_df(dataset, corpus, queries)
-        user_df = load_user_df(dataset)
-        expl_response = load_expl_response(dataset)
-
-    elif _training_method == "bertmt":
-        if _training_dataset_dir is None:
-            dataset_sl = load_training_data()
-        else:
-            dataset_sl = load_training_data_from_dir(_training_dataset_dir)
-        item_df_sl = load_item_df(dataset_sl, corpus, queries)
-        item_id_all = item_df_sl.index.to_list()
-        item_title_all = item_df_sl["TITLE"].to_list()
-        item_df = pd.DataFrame({"ITEM_ID": item_id_all, "TITLE": item_title_all})
-        item_df = item_df.set_index("ITEM_ID")
-        user_df = load_user_df(dataset_sl)
-        expl_response = load_expl_response(dataset_sl)
-    else:
-        item_df = load_item_df_unsupervised_learning(_training_method)
-
-    training_arguments = {
-        "lr": _lr,
-        "model_name": _model_name,
-        "max_length": _max_seq_length,
-        "pretrained_checkpoint": _checkpoint,
-        "do_validation": _do_validation,
-    }
-
-    if _training_method == "bertmt":
-        bmt_main(
-            item_df,
-            expl_response,
-            expl_response,
-            _epochs,
-            _batch_size,
-            _alpha,
-            _beta,
-            user_df,
-            train_kw=training_arguments,
-        )
-    elif _training_method == "bertbpr":
-        bbpr_main(
-            item_df,
-            expl_response,
-            expl_response,
-            _epochs,
-            _batch_size,
-            _alpha,
-            _beta,
-            user_df,
-            train_kw=training_arguments,
-        )
-    else:
-        item_df = item_df["TITLE"]
-        pre_trained_model = torch.load(_checkpoint)
-        VAE_training(
-            item_df,
-            training_args=None,
-            train_set_ratio=0.9,
-            max_length=training_arguments["max_length"],
-            vae_beta=_beta,
-            batch_size=_batch_size,
-            max_epochs=_epochs,
-            callbacks=None,
-            checkpoint=pre_trained_model,
-        )
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", default=30, type=int)
-    parser.add_argument("--max_seq_length", default=300, type=int)
-    parser.add_argument("--model_name", type=str, default="distilbert-base-uncased")
-    parser.add_argument("--epochs", default=10, type=int)
-    parser.add_argument("--lr", default=2e-5, type=float)
-    parser.add_argument("--beta", default=2e-3, type=float)
-    parser.add_argument("--alpha", default=1.0, type=float)
-    parser.add_argument("--training_method", default="bertmt", type=str)
-    parser.add_argument("--dataset", default="msmarco", type=str)
-    parser.add_argument("--checkpoint", default=None, type=str)
-    parser.add_argument("--training_dataset_dir", default=None, type=str)
-    parser.add_argument("--do_validation", default=False, type=bool)
-
-    args = parser.parse_args()
-    main(args)

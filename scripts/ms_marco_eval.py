@@ -25,16 +25,10 @@ except ImportError:
     warnings.warn("package beir not found")
 
 import pathlib
-import inspect
-
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
 
 from transformers import AutoTokenizer, AutoModel
-from src.ccrec.models.vae_models import VAEPretrainedModel
-from src.ccrec.models.bert_mt import _BertMT
-from src.ccrec.models.bbpr import _BertBPR
+from ccrec.models.bert_mt import _BertMT
+from ccrec.models.bbpr import _BertBPR
 from bm_25 import BM25
 
 from ccrec.util.amazon_review_prime_pantry import get_item_df
@@ -99,7 +93,7 @@ def load_data(task, data_split=None):
             for i in range(4)
         ]
         print([x[:5] for x in qids_split])
-        return corpus, queries, qrels, block_dict, qids_split, item_df["landingImage"]
+        return corpus, queries, qrels, block_dict, qids_split, item_df
 
     elif task == "ms_marco_full_ranking":
         corpus = pd.read_csv(
@@ -440,155 +434,3 @@ def extract_hard_negatives(
                     neg_pids.remove(pos_pid)
                 train_dataset[qid] = {"pos_pid": [pos_pid], "neg_pid": neg_pids}
         torch.save(train_dataset, "data/ms_marco/dev_dataset_{}.pt".format(model_name))
-
-
-# %%
-def main(args):
-    model_name_ = args.model_name
-    model_type = args.model_type
-    batch_size = args.batch_size
-    model_dir_ = args.model_dir
-    eval_method = args.eval_method
-    task = args.task
-    save_name = args.save_name
-
-    _gpu_ids = [i for i in range(torch.cuda.device_count())]
-    if torch.cuda.device_count() > 0:
-        batch_size = batch_size * len(_gpu_ids)
-
-    tokenizer = AutoTokenizer.from_pretrained(model_name_)
-    tokenize_func = lambda x: tokenizer(
-        x, padding=True, max_length=512, truncation=True, return_tensors="pt"
-    )
-
-    state = torch.load(model_dir_) if model_dir_ is not None else None
-    if model_type == "automodel":
-        model = AutoModel.from_pretrained(model_name_)
-        if state is not None:
-            model.load_state_dict(state)
-    elif model_type == "bertbpr":
-        model = _BertBPR(None, model_name=model_name_)
-        if state is not None:
-            if "state_dict" in state:
-                model.load_state_dict(state["state_dict"])
-            else:
-                model.load_state_dict(state)
-        model = model.item_tower
-    elif model_type == "bertmt":
-        model = _BertMT(None, model_name=model_name_)
-        if state is not None:
-            if "state_dict" in state:
-                model.load_state_dict(state["state_dict"])
-            else:
-                model.load_state_dict(state)
-        model = model.item_tower
-    elif model_type == "vaepretrainedmodel":
-        model = _BertMT(None, model_name=model_name_)
-        if state is not None:
-            if "state_dict" in state:
-                model.item_tower.load_state_dict(state["state_dict"])
-            else:
-                model.item_tower.ae_model.load_state_dict(state)
-        model = model.item_tower
-
-    model.eval()
-    model = torch.nn.DataParallel(model, device_ids=_gpu_ids)
-    model = model.cuda(_gpu_ids[0]) if _gpu_ids != [] else model
-
-    if model_type == "automodel":
-
-        def mean_pooling(token_embeddings, mask):
-            token_embeddings = token_embeddings.masked_fill(
-                ~mask[..., None].bool(), 0.0
-            )
-            sentence_embeddings = (
-                token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
-            )
-            return sentence_embeddings
-
-        def transform(x):
-            tokens = tokenize_func(x)
-            model_outputs = model(
-                input_ids=tokens["input_ids"].cuda(),
-                attention_mask=tokens["attention_mask"].cuda(),
-            )
-            outputs = mean_pooling(model_outputs[0], tokens["attention_mask"].cuda())
-            return outputs
-
-    elif model_type == "bertbpr":
-
-        def transform(x):
-            tokens = tokenize_func(x)
-            outputs = model(**tokens)
-            return outputs
-
-    elif model_type == "bertmt":
-
-        def transform(x):
-            tokens = tokenize_func(x)
-            outputs, _ = model(**tokens, output_step="return_mean_std")
-            return outputs
-
-    elif model_type == "vaepretrainedmodel":
-
-        def transform(x):
-            tokens = tokenize_func(x)
-            # outputs = model(**tokens, output_step="embedding")
-            outputs, _ = model(**tokens, output_step="return_mean_std")
-            # outputs = model(**tokens, output_step="cls")
-            return outputs
-
-    embedding_func = lambda x: transform(x)
-
-    corpus, queries, qrels = load_data(task)
-
-    time_start = time.time()
-    with autocast():
-        if eval_method == "find_hard_negatives":
-            extract_hard_negatives(
-                embedding_func, corpus, queries, model_type, batch_size
-            )
-        elif eval_method == "find_hard_negatives_for_devs":
-            extract_hard_negatives(
-                embedding_func, corpus, queries, model_type, batch_size, qrels
-            )
-        elif "ranking" in eval_method:
-            if eval_method == "ranking":
-                ranking_profile = ranking(corpus, queries, embedding_func, batch_size)
-            elif eval_method == "ranking_bm25":
-                ranking_profile = ranking_bm25(corpus, queries)
-            evaluator = EvaluateRetrieval(None)
-            mrr = evaluator.evaluate_custom(
-                qrels, ranking_profile, [1, 5, 10, 100], metric="mrr"
-            )
-            for name, value in mrr.items():
-                print("{}".format(name), ":", value)
-            ndcg, _map, recall, precision = evaluator.evaluate(
-                qrels, ranking_profile, [1, 5, 10, 100]
-            )
-            results = [ndcg, _map, recall, precision]
-            for res in results:
-                print("................................")
-                for name, value in res.items():
-                    print("{}".format(name), ":", value)
-        else:
-            NotImplementedError("NOT IMPLEMENTED!")
-
-    torch.save(ranking_profile, "ranking_profiles/{}_{}.pt".format(task, save_name))
-    time_end = time.time()
-    print("Time used:", time_end - time_start)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="distilbert-base-uncased")
-    parser.add_argument("--model_dir", type=str, default=None)
-    parser.add_argument("--batch_size", default=512, type=int)
-    parser.add_argument("--model_type", type=str, default="bertmt")
-    parser.add_argument("--eval_method", type=str, default="ranking")
-    parser.add_argument("--task", type=str, default="msmarco")
-    parser.add_argument("--save_name", type=str, default="0")
-
-    args = parser.parse_args()
-
-    main(args)

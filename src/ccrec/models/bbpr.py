@@ -1,6 +1,6 @@
 from transformers import AutoTokenizer, AutoModel, DefaultDataCollator
 from datasets import Dataset
-from rime.util import (
+from rime_lite.util import (
     default_random_split,
     empty_cache_on_exit,
     _LitValidated,
@@ -20,7 +20,7 @@ import os, itertools, dataclasses, warnings, collections, re, tqdm
 from ccrec.util import _device_mode_context, get_training_precision
 from ccrec.util.shap_explainer import I2IExplainer
 from ccrec.models.item_tower import NaiveItemTower
-import rime
+import rime_lite
 from ccrec.env import create_reranking_dataset
 
 # https://pytorch-lightning.readthedocs.io/en/stable/notebooks/lightning_examples/text-transformers.html
@@ -592,6 +592,6 @@ def bbpr_main(
 
     gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
     reranking_scores = bbpr.transform(gnd) + gnd.prior_score
-    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+    metrics = rime_lite.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 
     return metrics, reranking_scores, bbpr

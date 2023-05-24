@@ -52,7 +52,8 @@ corpus, queries, qrels, *extra = load_data(DATA_NAME)
 
 if len(extra):
     assert not len(qids_split), "expect splits from load_data"
-    block_dict, qids_split, landingImage = extra
+    block_dict, qids_split, item_df = extra
+    landingImage = item_df["landingImage"]
 else:
     block_dict = landingImage = None
 

@@ -2,9 +2,9 @@ import os, warnings, dataclasses, collections, itertools, time, functools, typin
 import pandas as pd, numpy as np, scipy.sparse as sps
 from pytorch_lightning.loggers import TensorBoardLogger
 from ccrec.util import merge_unique
-import rime
-from rime.dataset import Dataset
-from rime.util import indices2csr, perplexity, matrix_reindex, cached_property
+import rime_lite
+from rime_lite.dataset import Dataset
+from rime_lite.util import indices2csr, perplexity, matrix_reindex, cached_property
 
 
 def create_zero_shot(
@@ -106,7 +106,7 @@ def create_reranking_dataset(
             )
         )
 
-    return rime.dataset.Dataset(
+    return rime_lite.dataset.Dataset(
         user_df,
         item_df,
         event_df,
@@ -178,216 +178,6 @@ def _sanitize_inputs(event_df, user_df, item_df, clear_future_events=None):
             event_df = past_event_df
 
     return event_df
-
-
-@dataclasses.dataclass
-class Env:
-    user_df: pd.DataFrame
-    item_df: pd.DataFrame
-    event_df: pd.DataFrame = None
-    prefix: str = "ccrec-env-"
-    sample_size: int = 2
-    recording: bool = True
-    test_requests: pd.DataFrame = (
-        None  # allow multiple requests per user when recording is off
-    )
-    item_in_test: pd.DataFrame = (
-        None  # a subset of item_df, e.g., containing only passages
-    )
-    horizon: float = float("inf")  # TODO: not used any more
-    clear_future_events: bool = None  # TODO: not used any more
-    exclude_train: typing.Union[
-        bool, list
-    ] = True  # exclude query item (brand) from candidates
-    sample_with_prior: float = 0  # 1e5 to rerank top candidates; add candidates to event_df through create_reranking_dataset
-    _is_synthetic: bool = True
-    _sort_candidates: bool = None  # set default according to _is_synthetic
-    _text_width: int = None  # set default according to _is_synthetic
-    _text_ellipsis: bool = None  # set default according to _is_synthetic
-    _start_step_idx: int = 0
-    _minimum_wait_time: float = 0.1
-    summarizer: list = None
-
-    def __post_init__(self):
-        self.name = "{}-{}-{}".format(self.prefix, len(self.user_df), len(self.item_df))
-        self._logger = TensorBoardLogger("logs", self.name)
-        self._logger.log_hyperparams(
-            {
-                k: v
-                for k, v in locals().items()
-                if k
-                in [
-                    "sample_size",
-                    "recording",
-                    "horizon",
-                    "clear_future_events",
-                    "sample_with_prior",
-                ]
-            }
-        )
-        print(f"{self.__class__.__name__} logs at {self._logger.log_dir}")
-
-        self.event_df = _sanitize_inputs(
-            self.event_df, self.user_df, self.item_df, self.clear_future_events
-        )
-
-        self.reranking_prior_scores = None
-        if self.test_requests is None:
-            self.test_requests = self.user_df.set_index("TEST_START_TIME", append=True)
-        elif isinstance(self.test_requests, Dataset):
-            self.reranking_prior_scores = self.test_requests
-            self.test_requests = self.user_df.set_index("TEST_START_TIME", append=True)
-
-        if self.item_in_test is None:
-            self.item_in_test = self.item_df[self.item_df.index != "Other"]
-
-        if self.recording:
-            assert self.test_requests.index.get_level_values(
-                0
-            ).is_unique, "expect unique USER_ID in test_requests when recording is on"
-            assert self.horizon == float(
-                "inf"
-            ), "expect horizon=inf when recording is on"
-
-        if self._sort_candidates is None:
-            self._sort_candidates = self._is_synthetic
-        if self._text_width is None:
-            self._text_width = 10 if self._is_synthetic else 160
-        if self._text_ellipsis is None:
-            self._text_ellipsis = not self._is_synthetic
-
-        self._tokenize = {k: j for j, k in enumerate(self.item_df.index)}
-        self._response = {}
-        self._reward_by_policy = []
-
-    @cached_property
-    def _item_titles(self):
-        item_df = (
-            self.item_df
-            if "TITLE" in self.item_df
-            else self.item_df.assign(TITLE=self.item_df.index.astype(str))
-        )
-        return item_df["TITLE"].apply(
-            lambda x: x
-            if len(x) < self._text_width
-            else x[: self._text_width - 4 * self._text_ellipsis]
-            + " ..." * self._text_ellipsis
-        )
-
-    def _get_step_idx(self):
-        return (
-            self._start_step_idx
-            if len(self._response) == 0
-            else max(self._response.keys()) + 1
-        )
-
-    def _last_step_idx(self):
-        return self._get_step_idx() - 1
-
-    def step(self, *policies, explainer=None):
-        """response ('USER_ID', 'TEST_START_TIME'), ['_hist_items', 'cand_items', '_group', 'multi_label'])"""
-        step_idx = self._get_step_idx()
-        request, D = self._create_request(*policies)
-        self._logger.log_metrics(
-            {"request_ppl": _get_request_perplexity(request)}, step_idx
-        )
-
-        if explainer is not None:
-            self.explainer = explainer
-        response = self._invoke(request, D, step_idx)
-        self._response[step_idx] = response
-
-        if self.recording:
-            self._update_events(response, step_idx)
-        self._logger.log_metrics(
-            {
-                "collected_len": len(response),
-                "collected_sum": np.vstack(response["multi_label"]).sum(),
-            },
-            step_idx,
-        )
-
-        reward_by_policy = _evaluate_response(response)
-        self._reward_by_policy.append(reward_by_policy)
-        self._logger.experiment.add_scalars(
-            "reward_by_policy", reward_by_policy, step_idx
-        )
-        return reward_by_policy
-
-    def _create_request(self, *policies):
-        if time.time() < self.event_df["TIMESTAMP"].max() + self._minimum_wait_time:
-            time.sleep(self._minimum_wait_time)  # wait once
-
-        if isinstance(self.test_requests, collections.abc.Callable):
-            test_requests = self.test_requests(
-                self.user_df, self.event_df
-            )  # query_least_certain_users
-        else:
-            test_requests = self.test_requests
-        D = self._create_testing_dataset(test_requests=test_requests)
-        if self.reranking_prior_scores is not None:
-            D.prior_score = D.prior_score + self.reranking_prior_scores.prior_score
-
-        sample_size = (
-            self.sample_size
-            if np.size(self.sample_size) > 1
-            else [self.sample_size] * len(policies)
-        )
-        total_size = sum(sample_size)
-        J = [p(D, total_size) for p in policies]
-
-        rows = zip(*J)
-        display = [merge_unique(lol, sample_size, total_size) for lol in rows]
-        display_J, display_groups = zip(*display)
-
-        req = D.test_requests[["_hist_items"]].assign(
-            cand_items=self.item_in_test.index.values[np.asarray(display_J)].tolist(),
-            _group=np.asarray(display_groups).tolist(),
-            request_time=time.time(),
-        )
-        req["last_title"] = req["_hist_items"].apply(
-            lambda x: self._item_titles.loc[x[-1]] if len(x) else "(empty)"
-        )
-        req["cand_titles"] = req["cand_items"].apply(
-            lambda x: self._item_titles.loc[x].tolist()
-        )
-        req = _sort_or_shuffle(req, self._sort_candidates)
-        return req, D  # for SimuEnv
-
-    def _invoke(self, request, D, step_idx):
-        return NotImplementedError("return request + multi_label column")
-
-    def _update_events(self, response, step_idx):
-        new_events = parse_response(response, step_idx)
-        self.event_df = pd.concat([self.event_df, new_events], ignore_index=True)
-
-    def _create_testing_dataset(self, test_requests=None):
-        return Dataset(
-            self.user_df,
-            self.item_df,
-            self.event_df,
-            test_requests,
-            self.item_in_test,
-            exclude_train=self.exclude_train,
-            horizon=self.horizon,
-            sample_with_prior=self.sample_with_prior,
-        )
-
-    def _create_training_dataset(self, test_update_history=False):
-        test_requests = (
-            self.event_df.groupby(["USER_ID", "TIMESTAMP"]).size().to_frame("_siz")
-        )
-        return Dataset(
-            self.user_df,
-            self.item_df,
-            self.event_df,
-            test_requests,
-            self.item_in_test,
-            exclude_train=self.exclude_train,
-            horizon=0.01,
-            sample_with_prior=1.0,
-            test_update_history=test_update_history,
-        )
 
 
 def query_least_certain_users(batch_size):
