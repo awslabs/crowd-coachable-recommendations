@@ -1,0 +1,124 @@
+<!-- You must include this JavaScript file -->
+<script src="https://assets.crowd.aws/crowd-html-elements.js"></script>
+
+<!-- For the full list of available Crowd HTML Elements and their input/output documentation,
+      please refer to https://docs.aws.amazon.com/sagemaker/latest/dg/sms-ui-template-reference.html -->
+
+<!-- You must include crowd-form so that your task submits answers to MTurk -->
+<crowd-form answer-format="flatten-objects">
+<div class="container"> 
+<div class="row">
+    <table style="width:75%">
+        <td>
+            <strong>
+                Given an item below, select the most similar items.
+            </strong>
+            <br>
+            <strong>Given item: </strong>
+            <small>${query}</small>
+        </td>
+        <td>
+            <img style="height: 20vh; width: 20vw; object-fit: contain" src="${img-q}"/>
+        </td>
+    </table>
+</div>
+
+    
+    <!-- The crowd-classifier element will create a tool for the Worker to select the
+           correct answer to your question -->
+    <crowd-classifier 
+      name="quetion-answering"
+      categories="['1', '2', '3', '4', '5 -- None of the above']"
+    >
+      <classification-target>
+          <table style="width:75%; border-spacing:10px">
+              <tr>
+                  <td><small>(1): ${passage-1}</small></td>
+                  <td><small>(2): ${passage-2}</small></td>
+              </tr>
+              <tr>
+                  <td><img style="height: 20vh; width: 20vw; object-fit: contain" src="${img-1}"/></td>
+                  <td><img style="height: 20vh; width: 20vw; object-fit: contain" src="${img-2}"/></td>
+              </tr>
+              <tr>
+                  <td><small>(3): ${passage-3}</small></td>
+                  <td><small>(4): ${passage-4}</small></td>
+              </tr>
+              <tr>
+                  <td><img style="height: 20vh; width: 20vw; object-fit: contain" src="${img-3}"/></td>
+                  <td><img style="height: 20vh; width: 20vw; object-fit: contain" src="${img-4}"/></td>
+              </tr>
+          </table>
+      </classification-target>
+
+     <!-- Use the short-instructions section for quick instructions that the Worker
+            will see while working on the task. Including some basic examples of 
+            good and bad answers here can help get good results. You can include 
+            any HTML here. -->
+      <short-instructions>
+        <strong>Given an item below, select the most similar items.</strong>
+        <p>
+        <strong>Given item: </strong>
+        <br><small>American Crew Forming Cream, 3 ounce</small>
+        </p>
+        <img style="height: 15vh; margin-bottom: 0px" src="https://images-na.ssl-images-amazon.com/images/I/416-9VxyC8S._SX300_SY300_QL70_ML2_.jpg"/>
+        <p>
+            <strong>(1): </strong>
+            Garnier Fructis Sleek & Shine AntiFrizz Serum, Frizzy, Dry, Unmanageable Hair, 5.1 fl. oz.
+        </p>
+            <img style="height: 15vh; margin-bottom: 0px" src="https://images-na.ssl-images-amazon.com/images/I/41QQXhLll7L._SX300_SY300_QL70_ML2_.jpg"/>
+
+        <p>
+            <strong>(2): </strong>
+            Got2b Phenomenal Thickening Cream, 6 Ounce
+        </p>
+            <img style="height: 15vh; margin-bottom: 0px" src="https://images-na.ssl-images-amazon.com/images/I/41Wzhq1z1IL._SX300_SY300_QL70_ML2_.jpg"/>
+        
+        <p>
+            <strong>(3): </strong>
+            Wrights Copper Cream, 8 Ounce
+        </p>
+            <img style="height: 15vh; margin-bottom: 0px" src="https://images-na.ssl-images-amazon.com/images/I/619QCqciidL.__AC_SX300_SY300_QL70_ML2_.jpg"/>
+        
+        <p>
+            <strong>(4): </strong>
+            North American Herb and Spice, Sinu Orega, 2 Fluid Ounce
+        </p>
+            <img style="height: 15vh; margin-bottom: 0px" src="https://m.media-amazon.com/images/I/61CLdx+Oi7L._AC_SY300_SX300_.jpg"/>
+        <p>
+        <strong>The correct answer is (2). </strong>
+        </p>
+        <p>
+        Notice: Each question is sent to multiple workers and we use Dawid Skene (DS) consensus
+        voting algorithm to find the best answers. We may include some trick options to
+        calibrate the DS algorithm to reduce its error rates.
+        Notice that, the DS algorithm performs a joint evaluation of worker rating
+        (based on consensus with other workers) and task labeling.
+        If we find a worker's rating too low, we cannot use the labels and we may
+        <strong>reject up to ALL of the payments</strong> depending on the specific conditions.
+        For answers which win the DS selection (around 50% of all answers),
+        we send out a small bonus as a gesture of our appreciation.
+        </p>
+
+      </short-instructions>
+
+      <!-- Use the full-instructions section for more detailed instructions that the 
+            Worker can open while working on the task. Including more detailed 
+            instructions and additional examples of good and bad answers here can
+            help get good results. You can include any HTML here. -->
+      <full-instructions header="Reminder">
+        <p>
+        Each question is sent to multiple workers and we use Dawid Skene (DS) consensus
+        voting algorithm to find the best answers. We may include some trick options to
+        calibrate the DS algorithm to reduce its error rates.
+        Notice that, the DS algorithm performs a joint evaluation of worker rating
+        (based on consensus with other workers) and task labeling.
+        If we find a worker's rating too low, we cannot use the labels and we may
+        <strong>reject up to ALL of the payments</strong> depending on the specific conditions.
+        For answers which win the DS selection (around 50% of all answers),
+        we send out a small bonus as a gesture of our appreciation.
+        </p>
+      </full-instructions>
+
+    </crowd-classifier>
+</crowd-form>

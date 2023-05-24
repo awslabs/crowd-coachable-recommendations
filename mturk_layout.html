@@ -1,0 +1,130 @@
+mturk_layout.html
+
+<!-- You must include this JavaScript file -->
+<script src="https://assets.crowd.aws/crowd-html-elements.js"></script>
+
+<!-- For the full list of available Crowd HTML Elements and their input/output documentation,
+      please refer to https://docs.aws.amazon.com/sagemaker/latest/dg/sms-ui-template-reference.html -->
+
+<!-- You must include crowd-form so that your task submits answers to MTurk -->
+<crowd-form answer-format="flatten-objects">
+<div class="container"> 
+<div class="row">
+    <p>
+      <strong>
+        Given a query below, select the most relevant passages.
+      </strong>
+    </p>
+<p>
+        <strong>Query: </strong>
+        
+        <br><small>${query}</small>
+    </p>
+</div>
+
+    
+    <!-- The crowd-classifier element will create a tool for the Worker to select the
+           correct answer to your question -->
+    <crowd-classifier 
+      name="quetion-answering"
+      categories="['1', '2', '3', '4', '5 -- None of the above']"
+    >
+      <classification-target>
+        <div class="row">
+        <p>
+            <small>(1): ${passage-1}</small>
+        </p>
+        </div>
+        <hr>
+        <div class="row">
+        <p>
+            <small>(2): ${passage-2}</small>
+        </p>
+        </div>
+        <hr>
+        <div class="row">
+        <p>
+            <small>(3): ${passage-3}</small>
+        </p>
+        </div>
+        <hr>
+        <div class="row">
+        <p>
+            <small>(4): ${passage-4}</small>
+        </p>
+        </div>
+      </classification-target>
+
+     <!-- Use the short-instructions section for quick instructions that the Worker
+            will see while working on the task. Including some basic examples of 
+            good and bad answers here can help get good results. You can include 
+            any HTML here. -->
+      <short-instructions>
+        <strong>Given a query below, select the most relevant passages.</strong>
+        <p>
+        <strong>Query: </strong>
+        <br><small>How much is a cost to run Disneyland?</small>
+        </p>
+        <p>
+            <strong>(1): </strong>
+            It's the only park to be built under the direction of Walt Disney 
+            himself and there are plenty of reasons to take the kids to Disneyland.
+            Park in Anaheim, California.
+        </p>
+
+        <p>
+            <strong>(2): </strong>
+            Sixty years ago today, Walt Disney introduced the world very first theme park:
+            Disneyland. How much did a trip to the Happiest Place on Earth cost in 1955?
+            $1 for adults and 50 cents for children.
+        </p>
+        
+        <p>
+            <strong>(3): </strong>
+            Disney's Theme Parks had a operating cost of 571 million dollars
+            divided by their 11 parks and being open 365 days a year, 
+            on average their operating cost per day is around 355,000.
+        </p>
+        
+        <p>
+            <strong>(4): </strong>
+            I was thinking about buying a few shares of Disney stock for my family for christmas. 
+            I know that Euro Disney has this program...But what about the United States?
+        </p>
+        <p>
+        <strong>The correct answer is (3). </strong>
+        </p>
+        <p>
+        Notice: Each question is sent to multiple workers and we use Dawid Skene (DS) consensus
+        voting algorithm to find the best answers. We may include some trick options to
+        calibrate the DS algorithm to reduce its error rates.
+        Notice that, the DS algorithm performs a joint evaluation of worker rating
+        (based on consensus with other workers) and task labeling.
+        If we find a worker's rating too low, we cannot use the labels and we may
+        <strong>reject up to ALL of the payments</strong> depending on the specific conditions.
+        For answers which win the DS selection (around 50% of all answers),
+        we send out a small bonus as a gesture of our appreciation.
+        </p>
+
+      </short-instructions>
+
+      <!-- Use the full-instructions section for more detailed instructions that the 
+            Worker can open while working on the task. Including more detailed 
+            instructions and additional examples of good and bad answers here can
+            help get good results. You can include any HTML here. -->
+      <full-instructions header="Reminder">
+        <p>
+        Each question is sent to multiple workers and we use Dawid Skene (DS) consensus
+        voting algorithm to find the best answers. We may include some trick options to
+        calibrate the DS algorithm to reduce its error rates.
+        Notice that, the DS algorithm performs a joint evaluation of worker rating
+        (based on consensus with other workers) and task labeling.
+        If we find a worker's rating too low, we cannot use the labels and we may
+        <strong>reject up to ALL of the payments</strong> depending on the specific conditions.
+        For answers which win the DS selection (around 50% of all answers),
+        we send out a small bonus as a gesture of our appreciation.
+        </p>
+      </full-instructions>
+
+    </crowd-classifier>
+</crowd-form>
