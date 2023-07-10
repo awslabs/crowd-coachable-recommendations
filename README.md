@@ -6,7 +6,7 @@
   title     = {Active Learning with Crowd Sourcing Improves Information Retrieval},
   year      = {2023},
   maintitle = {International Conference on Machine Learning},
-  booktitle = {Workshop on Interactive Learning with Implicit Human Feedback},
+  booktitle = {Workshop on Interactive Learning with Implicit Human Feedback}
 }
 ```
 
