@@ -1,8 +1,17 @@
-## Crowd Coachable Recommendations / Retrieval (CCR)
+# Crowd Coachable Recommendations / Retrieval (CCR)
+
+```
+@inproceedings{chen2023active,
+  author    = {Chen, Zhuotong and Ma, Yifei and Kveton, Branislav and Deoras, Anoop},
+  title     = {Active Learning with Crowd Sourcing Improves Information Retrieval},
+  year      = {2023},
+  maintitle = {International Conference on Machine Learning},
+  booktitle = {Workshop on Interactive Learning with Implicit Human Feedback},
+}
+```
 
 Contents:
 
-* `appendix.pdf` provides the appendix to the submitted paper.
 * `al_demo_prime_pantry.ipynb` povides a notebook template to run oracle-labeled active learning experiments on a small-scale dataset.
 * `al_demo_nq.ipynb` provides oracle-labeled experiments on the larger-scale natural questions dataset.
 
