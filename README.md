@@ -10,7 +10,7 @@
 }
 ```
 
-Contents:
+## Contents
 
 * `al_demo_prime_pantry.ipynb` povides a notebook template to run oracle-labeled active learning experiments on a small-scale dataset.
 * `al_demo_nq.ipynb` provides oracle-labeled experiments on the larger-scale natural questions dataset.
