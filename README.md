@@ -1,18 +1,26 @@
-## Crowd Coachable Recommendations (CCRec)
+# Crowd Coachable Recommendations / Retrieval (CCR)
 
-![pytest workflow](https://github.com/awslabs/crowd-coachable-recommendations/actions/workflows/python-app.yml/badge.svg)
+```
+@inproceedings{chen2023active,
+  author    = {Chen, Zhuotong and Ma, Yifei and Kveton, Branislav and Deoras, Anoop},
+  title     = {Active Learning with Crowd Sourcing Improves Information Retrieval},
+  year      = {2023},
+  maintitle = {International Conference on Machine Learning},
+  booktitle = {Workshop on Interactive Learning with Implicit Human Feedback},
+}
+```
 
-Codes for zero-shot recommendations and subsequent online learning and exploration with crowd-sourced preference labels.
+## Contents
 
-## Getting Started
+* `al_demo_prime_pantry.ipynb` povides a notebook template to run oracle-labeled active learning experiments on a small-scale dataset.
+* `al_demo_nq.ipynb` provides oracle-labeled experiments on the larger-scale natural questions dataset.
 
-* Run `pip install -e .` for the ccrec package. This should also install part of the `recurrent-intensity-model-experiments` package as a dependency.
-* If you encounter a `numba` error, please run this: `pip install --no-cache-dir --ignore-installed -U numba`
-* To test: `from ccrec.util.demo_data import DemoData; DemoData().run_shap()`
+The only change between the two notebooks is `DATA_NAME="nq"` in the configuration line. One may also change it to `DATA_NAME="msmarco"` for the larger-scale MS-MARCO oracle-labeled experiments.
 
-## Data Preparation
-CCRec considers both unsupervised and semi-supervised datasets for training purposes. Unsupervised datasets contain only item dataframes (`item_df`) and semi-supervised datasets contain `user_df` and `response_df` as well. The final dataset can be constructed through `ccrec.env.base.create_zero_shot` and `create_reranking_dataset` functions, respectively.
-![ccrec_data.png](figure/ccrec_data.png)
+Crowd-sourcing experiments are run by calling `scripts/al_0_rank.py`, `scripts/al_1_em.py`, `scripts/al_2_ft.py` sequentially for each batch of the labeling tasks.
+Human feedback is provided between al_0_rank and al_1_em by uploading `request_perm.csv` and downloading `human_response.csv` in the same data-step folder.
+
+All experiments are conducted using NVidia A10G GPU machines with 4-GPU parallelization. Runtime is usually less than 3 hours per active learning step. Human tasks are usually completed under 45 minutes.
 
 ## Contributing
 

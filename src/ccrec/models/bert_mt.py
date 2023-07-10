@@ -18,13 +18,13 @@ from ccrec.models.bbpr import (
     default_random_split,
     _LitValidated,
 )
-from ccrec.models import vae_models
 from transformers import DefaultDataCollator, DataCollatorForLanguageModeling
 from ccrec.models.vae_lightning import VAEData
-import rime
+from rime_lite.metrics import evaluate_item_rec
 from ccrec.env import create_reranking_dataset
-from ccrec.models.item_tower import VAEItemTower
-from transformers import get_linear_schedule_with_warmup
+from ccrec.models.item_tower import NaiveItemTower
+from ccrec.util import get_training_precision
+from transformers import get_linear_schedule_with_warmup, AutoModel, AutoTokenizer
 from pytorch_lightning.callbacks import LearningRateMonitor
 
 
@@ -47,13 +47,14 @@ class _BertMT(_BertBPR):
         model_cls_name="VAEPretrainedModel",
         tokenizer=None,
         tokenizer_kw={},
-        **bmt_kw,
     ):
         super(_BertBPR, self).__init__()
         if valid_n_negatives is None:
             valid_n_negatives = n_negatives
         self.sample_with_prior = sample_with_prior
         self.sample_with_posterior = sample_with_posterior
+        if tokenizer is None:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         self.save_hyperparameters(
             "alpha",
@@ -68,12 +69,16 @@ class _BertMT(_BertBPR):
             setattr(self, name, getattr(self.hparams, name))
         self.training_prior_fcn = training_prior_fcn
 
-        vae_model = getattr(vae_models, model_cls_name).from_pretrained(model_name)
-        if hasattr(vae_model, "set_beta"):
-            vae_model.set_beta(beta)
-        self.item_tower = VAEItemTower(
-            vae_model, tokenizer=tokenizer, tokenizer_kw=tokenizer_kw
+        self.model_name = model_name
+        self.item_tower = NaiveItemTower(
+            AutoModel.from_pretrained(model_name),
+            torch.nn.LayerNorm(
+                768, elementwise_affine=True
+            ),  # not used in facebook/contriever models
+            tokenizer=tokenizer,
+            tokenizer_kw=tokenizer_kw,
         )
+
         if pretrained_checkpoint is not None:
             print("Load pre-trained model...")
             state = torch.load(pretrained_checkpoint)
@@ -89,6 +94,7 @@ class _BertMT(_BertBPR):
         self.all_inputs = all_inputs
         self.alpha = alpha
         self.objective = "multiple_nrl"
+        print(self.objective, f"alpha={self.alpha}")
 
     def set_training_data(self, ct_cycles=None, ft_cycles=None, max_epochs=None, **kw):
         super().set_training_data(**kw)
@@ -99,7 +105,9 @@ class _BertMT(_BertBPR):
     def training_and_validation_step(self, batch, batch_idx):
         ijw, inputs = batch
         ft_loss = super().training_and_validation_step(ijw, batch_idx)
-        ct_loss = self.item_tower(**inputs, output_step="dict")[0]
+        ct_loss = np.array(
+            0.0
+        )  # corpus-tuning (vae) loss not implemented for contriever models
         return (
             1 - self.alpha
         ) / self.ct_cycles * ct_loss.mean() + self.alpha / self.ft_cycles * ft_loss.mean()
@@ -163,7 +171,7 @@ class _DataMT(_DataModule):
             batch_size,
             valid_batch_size,
         )
-        self._ct = VAEData(
+        self._ct = VAEData(  # TODO: remove VAEData
             item_df, tokenizer, vae_batch_size, do_validation, **tokenizer_kw
         )
         self.training_data.update(
@@ -303,7 +311,7 @@ class BertMT(BertBPR):
             strategy=self.strategy,
             log_every_n_steps=1,
             callbacks=[model._checkpoint, LearningRateMonitor()],
-            precision="bf16" if torch.cuda.is_available() else 32,
+            precision=get_training_precision(),
         )
 
         trainer.fit(model, datamodule=dm)
@@ -366,6 +374,6 @@ def bmt_main(
 
     gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
     reranking_scores = bmt.transform(gnd) + gnd.prior_score
-    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+    metrics = evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 
     return metrics, reranking_scores, bmt

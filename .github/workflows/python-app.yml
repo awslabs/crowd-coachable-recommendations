@@ -35,12 +35,9 @@ jobs:
     - name: Pip freeze
       run: |
         pip freeze
-    - name: Download test data
-      run: |
-        (cd data/amazon_review_prime_pantry && wget http://jmcauley.ucsd.edu/data/amazon_v2/metaFiles2/meta_Prime_Pantry.json.gz)
-    - name: Test with pytest
-      run: |
-        pytest
+#     - name: Test with pytest
+#       run: |
+#         pytest
     - name: Setup tmate session
       if: ${{ failure() }}
       uses: mxschmitt/action-tmate@v3

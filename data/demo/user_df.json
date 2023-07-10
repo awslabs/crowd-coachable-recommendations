@@ -1,8 +1,0 @@
-{"USER_ID": "a1", "TEST_START_TIME": 1, "_hist_items": ["apple1"], "_hist_ts": [0]}
-{"USER_ID": "a2", "TEST_START_TIME": 1, "_hist_items": ["apple2"], "_hist_ts": [0]}
-{"USER_ID": "b1", "TEST_START_TIME": 1, "_hist_items": ["banana1"], "_hist_ts": [0]}
-{"USER_ID": "b2", "TEST_START_TIME": 1, "_hist_items": ["banana2"], "_hist_ts": [0]}
-{"USER_ID": "c1", "TEST_START_TIME": 1, "_hist_items": ["citrus1"], "_hist_ts": [0]}
-{"USER_ID": "c2", "TEST_START_TIME": 1, "_hist_items": ["citrus2"], "_hist_ts": [0]}
-{"USER_ID": "s1", "TEST_START_TIME": 1, "_hist_items": ["strawberry1"], "_hist_ts": [0]}
-{"USER_ID": "s2", "TEST_START_TIME": 1, "_hist_items": ["strawberry2"], "_hist_ts": [0]}

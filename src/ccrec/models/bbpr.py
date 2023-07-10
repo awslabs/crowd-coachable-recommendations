@@ -1,6 +1,6 @@
 from transformers import AutoTokenizer, AutoModel, DefaultDataCollator
 from datasets import Dataset
-from rime.util import (
+from rime_lite.util import (
     default_random_split,
     empty_cache_on_exit,
     _LitValidated,
@@ -17,10 +17,10 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 import functools, torch, numpy as np, pandas as pd
 import os, itertools, dataclasses, warnings, collections, re, tqdm
-from ccrec.util import _device_mode_context
+from ccrec.util import _device_mode_context, get_training_precision
 from ccrec.util.shap_explainer import I2IExplainer
 from ccrec.models.item_tower import NaiveItemTower
-import rime
+from rime_lite.metrics import evaluate_item_rec
 from ccrec.env import create_reranking_dataset
 
 # https://pytorch-lightning.readthedocs.io/en/stable/notebooks/lightning_examples/text-transformers.html
@@ -71,6 +71,9 @@ class _BertBPR(_LitValidated):
             weight_decay = 1e-5 if freeze_bert > 0 else 0
         if valid_n_negatives is None:
             valid_n_negatives = n_negatives
+        if tokenizer is None:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+
         self.sample_with_prior = sample_with_prior
         self.sample_with_posterior = sample_with_posterior
 
@@ -87,6 +90,7 @@ class _BertBPR(_LitValidated):
             setattr(self, name, getattr(self.hparams, name))
         self.training_prior_fcn = training_prior_fcn
 
+        self.model_name = model_name
         self.item_tower = NaiveItemTower(
             _create_bert(model_name, freeze_bert),
             torch.nn.LayerNorm(
@@ -98,7 +102,7 @@ class _BertBPR(_LitValidated):
         self.all_inputs = all_inputs
 
         if pretrained_checkpoint is not None:
-            self.load_state_dict(torch.load(pretrained_checkpoint))
+            self.load_state_dict(torch.load(pretrained_checkpoint)["state_dict"])
 
         self.objective = "multiple_nrl"
 
@@ -124,12 +128,18 @@ class _BertBPR(_LitValidated):
             print(self._checkpoint.dirpath)
 
     def forward(self, batch):  # tokenized or ptr
+        output_step = os.environ["CCREC_EMBEDDING_TYPE"]
         if isinstance(batch, collections.abc.Mapping):  # tokenized
-            return self.item_tower(**batch)
+            return self.item_tower(**batch, output_step=output_step)
         elif hasattr(self, "all_cls"):  # ptr
-            return self.item_tower(self.all_cls[batch], input_step="cls")
+            return self.item_tower(
+                self.all_cls[batch.cpu()], input_step="cls", output_step=output_step
+            )
         else:  # ptr to all_inputs
-            return self.item_tower(**{k: v[batch] for k, v in self.all_inputs.items()})
+            return self.item_tower(
+                **{k: v[batch.cpu()] for k, v in self.all_inputs.items()},
+                output_step=output_step,
+            )
 
     def _pairwise(self, i, j):  # auto-broadcast on first dimension
         x = self.forward(self.i_to_ptr[i.ravel()]).reshape([*i.shape, -1])
@@ -186,15 +196,19 @@ class _BertBPR(_LitValidated):
             pos_emb = self.forward(self.j_to_ptr[j.ravel()]).reshape([*j.shape, -1])
             neg_emb = self.forward(self.j_to_ptr[nj]).reshape([*j.shape, -1])
 
-            qid_emb = torch.nn.functional.normalize(qid_emb, p=2, dim=1)
-            pos_emb = torch.nn.functional.normalize(pos_emb, p=2, dim=1)
-            neg_emb = torch.nn.functional.normalize(neg_emb, p=2, dim=1)
+            if os.environ["CCREC_SIM_TYPE"] == "cos":
+                qid_emb = torch.nn.functional.normalize(qid_emb, p=2, dim=1)
+                pos_emb = torch.nn.functional.normalize(pos_emb, p=2, dim=1)
+                neg_emb = torch.nn.functional.normalize(neg_emb, p=2, dim=1)
+            # else: dot
+
             pos_socres = torch.mm(qid_emb, pos_emb.transpose(0, 1))
             neg_scores = torch.mm(qid_emb, neg_emb.transpose(0, 1))
             labels = torch.tensor(
                 range(len(pos_socres)), dtype=torch.long, device=pos_socres.device
             )
-            scores = torch.cat((pos_socres, neg_scores), dim=1) * 20.0
+            inv_temperature = float(os.environ["CCREC_BBPR_INV_TEMPERATURE"])
+            scores = torch.cat((pos_socres, neg_scores), dim=1) * inv_temperature
             loss = torch.nn.CrossEntropyLoss()(scores, labels)
 
             return loss
@@ -416,7 +430,7 @@ class BertBPR:
             strategy=self.strategy,
             log_every_n_steps=1,
             callbacks=[model._checkpoint, LearningRateMonitor()],
-            precision="bf16" if torch.cuda.is_available() else 32,
+            precision=get_training_precision(),
         )
 
         if self._model_kw["freeze_bert"] > 0:  # cache all_cls
@@ -460,10 +474,9 @@ class BertBPR:
                     print("Processing", step, "|", num_batches)
                 text_batch = all_texts[step * batch_size : (step + 1) * batch_size]
                 tokens = self.tokenizer(text_batch, **self.tokenizer_kw)
-                if output_step == "embedding":
-                    embedding_batch = model(**tokens, output_step="embedding")
-                elif output_step == "mean":
-                    embedding_batch, _ = model(**tokens, output_step="return_mean_std")
+                embedding_batch = model(
+                    **tokens, output_step=os.environ["CCREC_EMBEDDING_TYPE"]
+                )
                 embeddings_all[
                     step * batch_size : (step * batch_size + len(text_batch)), :
                 ] = embedding_batch.cpu()
@@ -510,10 +523,9 @@ class BertBPR:
         elif hasattr(self.model.item_tower, "cls_model") or hasattr(
             self.model.item_tower, "ae_model"
         ):
-            if hasattr(self.model.item_tower, "cls_model"):
-                all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "embedding")
-            elif hasattr(self.model.item_tower, "ae_model"):
-                all_emb = self.get_all_embeddings(model_, BATCH_SIZE_, "mean")
+            all_emb = self.get_all_embeddings(
+                model_, BATCH_SIZE_, output_step="embedding"
+            )
             user_embedding = all_emb[dm.i_to_ptr]
             user_embedding = user_embedding.to(auto_device())
             for step_p in range(num_item_batches):
@@ -523,7 +535,10 @@ class BertBPR:
                 item_embeddings_batch = all_emb[item_ids]
                 item_embeddings_batch = item_embeddings_batch.to(auto_device())
                 num_of_items = item_embeddings_batch.shape[0]
-                scores = self.cos_sim(user_embedding, item_embeddings_batch)
+                if os.environ["CCREC_SIM_TYPE"] == "cos":
+                    scores = self.cos_sim(user_embedding, item_embeddings_batch)
+                else:  # dot
+                    scores = user_embedding @ item_embeddings_batch.T
                 scores = scores.cpu()
                 score_matrix[
                     :, step_p * BATCH_SIZE_ : (step_p * BATCH_SIZE_ + num_of_items)
@@ -531,6 +546,7 @@ class BertBPR:
 
         else:
             NotImplementedError("NOT IMPLEMENTED!")
+        model_ = model_.cpu()  # cleanup gpu
         return auto_cast_lazy_score(score_matrix)
 
     def to_explainer(self, **kw):
@@ -576,6 +592,6 @@ def bbpr_main(
 
     gnd = create_reranking_dataset(user_df, item_df, gnd_response, reranking_prior=1e5)
     reranking_scores = bbpr.transform(gnd) + gnd.prior_score
-    metrics = rime.metrics.evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
+    metrics = evaluate_item_rec(gnd.target_csr, reranking_scores, 1)
 
     return metrics, reranking_scores, bbpr

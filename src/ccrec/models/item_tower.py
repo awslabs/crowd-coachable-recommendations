@@ -1,11 +1,14 @@
 import torch, pandas as pd, numpy as np, functools, os, collections
 from datasets import Dataset, DatasetDict
-from rime.util import auto_device
+from rime_lite.util import auto_device
+from ccrec.util.data_parallel import DataParallel
+import warnings
 
 
 class ItemTowerBase(torch.nn.Module):
     """support text -> inputs -> cls -> embedding / loss;
-    tokenizer is required for text_to_inputs, to_map_fn and to_explainer for e2e inference"""
+    tokenizer is required for text_to_inputs, to_map_fn and to_explainer for e2e inference
+    """
 
     def __init__(self, *module_list, tokenizer=None, tokenizer_kw={}):
         super().__init__()
@@ -21,7 +24,9 @@ class ItemTowerBase(torch.nn.Module):
 
     @property
     def device(self):
-        return self.module_list[0].device
+        return self.module_list[
+            -1
+        ].device  # workaround for VAEPretrainedModel.device not working
 
     def text_to_inputs(self, text):
         return self.tokenizer(text, **self.tokenizer_kw)
@@ -66,7 +71,7 @@ class ItemTowerBase(torch.nn.Module):
             auto_wrap_text = lambda x: x
 
         if data_parallel:
-            self = torch.nn.DataParallel(self.cuda())
+            self = DataParallel(self.cuda()).cache_replicas()
             auto_wrap_device = lambda x: {k: v.cuda() for k, v in x.items()}
         else:
             auto_wrap_device = lambda x: x
@@ -114,69 +119,33 @@ class NaiveItemTower(ItemTowerBase):
         if input_step == "inputs":
             # bugfix: weird that self.device does not agree with self.cls_model.device
             inputs = {k: v.to(self.cls_model.device) for k, v in inputs.items()}
-            cls = self.cls_model(**inputs).last_hidden_state[:, 0]
+            last_hidden_state = self.cls_model(**inputs).last_hidden_state
+            cls = last_hidden_state[:, 0]
         else:  # cls
             cls = cls.to(self.device)
 
         if output_step == "embedding":
-            return self.standard_layer_norm(cls)
-        elif output_step == "cls":
+            output_step = os.environ["CCREC_EMBEDDING_TYPE"]
+            warnings.warn(
+                f"{self.__class__} inferring output_step from CCREC_EMBEDDING_TYPE as {output_step}"
+            )
+
+        if output_step in ["cls", "mu", "mean"]:
             return cls
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support {input_step}->{output_step} forward"
-        )
+        elif output_step == "mean_layer_norm":
+            return self.standard_layer_norm(cls)
+        elif output_step == "mean_pooling":
+            assert input_step != "cls", "cannot create mean pooling from cls"
+            mask = inputs["attention_mask"]
 
+            last_hidden_state = last_hidden_state.masked_fill(
+                ~mask[..., None].bool(), 0.0
+            )
+            sentence_embeddings = (
+                last_hidden_state.sum(dim=1) / mask.sum(dim=1)[..., None]
+            )
+            return sentence_embeddings  # unnormalized
 
-class VAEItemTower(ItemTowerBase):
-    """support reconstruction of (masked) inputs as well as cls/embedding outputs"""
-
-    def __init__(self, ae_model, **kw):
-        super().__init__(ae_model, **kw)
-        self.ae_model = ae_model
-        self.cls_to_embedding = ae_model.cls_to_embedding
-
-    def get_sample_param(self):
-        return self.ae_model.get_sample_param()
-
-    def set_sample_param(self, sample):
-        self.ae_model.set_sample_param(sample)
-
-    def forward(
-        self,
-        cls=None,
-        text=None,
-        input_step="inputs",
-        output_step="embedding",
-        **inputs,
-    ):
-        if input_step == "text":
-            inputs = self.text_to_inputs(text=text)
-            input_step = "inputs"
-
-        if input_step == "inputs":
-            inputs = {k: v.to(self.ae_model.device) for k, v in inputs.items()}
-            if output_step == "cls":
-                cls = self.ae_model(**inputs, return_cls=True)
-                return cls
-            if output_step == "mean":
-                mean, std = self.ae_model(
-                    **inputs, return_mean_std=True
-                )  # unnormalized mean
-                return mean
-            if output_step == "embedding":
-                return self.ae_model(
-                    **inputs, return_embedding=True
-                )  # normalized embedding
-            elif output_step == "dict":
-                return self.ae_model(**inputs, return_dict=True)  # ct loss and logits
-            elif output_step == "return_mean_std":
-                return self.ae_model(
-                    **inputs, return_mean_std=True
-                )  # ct loss and logits
-
-        elif input_step == "cls":
-            if output_step == "embedding":
-                return self.cls_to_embedding(cls)
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support {input_step}->{output_step} forward"
         )
