@@ -44,7 +44,7 @@ class VqNet(torch.nn.Module):
                 @ log_theta.swapaxes(-2, -1)[jj, y]  # batch * |z|
             )
         else:
-            mask = mask + 1e-10  # avoid nan
+            mask = mask[:, : self.K]  # skip n/a class if needed
             masked_theta_sum = torch.einsum("bzy,by->bz", theta[jj], mask)
             complete_log_lik = (
                 F.one_hot(ii, self.I).float().T  # I * batch
@@ -97,8 +97,6 @@ def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
         data_tuples = np.hstack([data_tuples, mask])
 
     unbiased_data = data_tuples[data_tuples[:, -1] < K - 1]
-    if mask is not None:
-        unbiased_data = unbiased_data[:, :-1]
 
     train_loader = DataLoader(unbiased_data, batch_size=unbiased_data.shape[0])
     trainer = pl.Trainer(
