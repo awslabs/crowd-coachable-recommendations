@@ -84,7 +84,7 @@ class LitModel(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=0.01, weight_decay=weight_decay)
 
 
-def train_vq(I, J, K, ii, jj, y, mask=None):
+def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
     """K is the total number of dimensions including n/a.
     Training will exclude n/a first and then add n/a back for inference
     """
@@ -108,12 +108,13 @@ def train_vq(I, J, K, ii, jj, y, mask=None):
         train_dataloaders=train_loader,
     )
 
-    plt.figure(figsize=(3, 2))
-    plt.plot(model._loss_hist)
-    plt.xlabel("step")
-    plt.ylabel("-Vq per task")
-    plt.grid()
-    plt.show()
+    if show_training_curve:
+        plt.figure(figsize=(3, 2))
+        plt.plot(model._loss_hist)
+        plt.xlabel("step")
+        plt.ylabel("-Vq per task")
+        plt.grid()
+        plt.show()
 
     with torch.no_grad():
         vq_net.set_K(K)
