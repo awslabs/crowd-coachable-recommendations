@@ -95,7 +95,10 @@ def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
         assert K == mask.shape[1], "mask dimension should match K, including n/a"
         assert mask[np.arange(len(ii)), y].min() > 0, "labels must have nonzero mask"
         data_tuples = np.hstack([data_tuples, mask])
-    unbiased_data = data_tuples[data_tuples[:, -1] < K - 1, :-1]
+
+    unbiased_data = data_tuples[data_tuples[:, -1] < K - 1]
+    if mask is not None:
+        unbiased_data = unbiased_data[:, :-1]
 
     train_loader = DataLoader(unbiased_data, batch_size=unbiased_data.shape[0])
     trainer = pl.Trainer(
