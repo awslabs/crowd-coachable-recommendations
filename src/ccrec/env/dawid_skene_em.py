@@ -45,10 +45,8 @@ class VqNet(torch.nn.Module):
                 @ log_theta.swapaxes(-2, -1)[jj, y]  # batch * |z|
             )
         else:
-            mask = mask[
-                :, : self.K
-            ]  # mask may contain n/a class that is unwanted for training
-            masked_theta_sum = torch.einsum("bzy,by->bz", theta[jj], mask)
+            mask = mask[:, : self.K]  # skip n/a class during training
+            masked_theta_sum = torch.einsum("bzy,by->bz", theta[jj], mask.float())
             complete_log_lik = (
                 F.one_hot(ii, self.I).float().T  # I * batch
                 @ (
@@ -56,9 +54,7 @@ class VqNet(torch.nn.Module):
                 ).log()
             )
 
-        qz = complete_log_lik.softmax(
-            -1
-        ).detach()  # stick to EM; detach has negligible effects
+        qz = complete_log_lik.softmax(-1).detach()  # EM calls for a detach operation
         Vq = (qz * complete_log_lik).sum(-1) - (qz * qz.log()).sum(-1)
 
         return qz, Vq
@@ -101,7 +97,7 @@ def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
         assert mask[np.arange(len(ii)), y].min() > 0, "labels must have nonzero mask"
         data_tuples = np.hstack([data_tuples, mask])
 
-    unbiased_data = data_tuples[data_tuples[:, -1] < K - 1]
+    unbiased_data = data_tuples[data_tuples[:, 2] < K - 1]  # y from 0 to K - 2
 
     train_loader = DataLoader(unbiased_data, batch_size=unbiased_data.shape[0])
     trainer = pl.Trainer(
@@ -128,7 +124,12 @@ def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
     with torch.no_grad():
         vq_net.set_K(K)
         snr = vq_net.snr_logit.sigmoid().detach().cpu().numpy()
-        qz, _ = vq_net(torch.as_tensor(ii), torch.as_tensor(jj), torch.as_tensor(y))
+        qz, _ = vq_net(
+            torch.as_tensor(ii),
+            torch.as_tensor(jj),
+            torch.as_tensor(y),
+            torch.as_tensor(mask) if mask is not None else None,
+        )
         qz = qz.detach().cpu().numpy()
     z_hat = qz.argmax(-1)
 
