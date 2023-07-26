@@ -4,7 +4,6 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-import matplotlib.pyplot as plt
 
 
 class VqNet(torch.nn.Module):
@@ -93,6 +92,7 @@ def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
     data_tuples = np.asarray([ii, jj, y]).T
     if mask is not None:
         assert K == mask.shape[1], "mask dimension should match K, including n/a"
+        assert mask[np.arange(len(ii)), y].min() > 0, "labels must have nonzero mask"
         data_tuples = np.hstack([data_tuples, mask])
     unbiased_data = data_tuples[data_tuples[:, -1] < K - 1, :-1]
 
@@ -109,6 +109,8 @@ def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
     )
 
     if show_training_curve:
+        import matplotlib.pyplot as plt
+
         plt.figure(figsize=(3, 2))
         plt.plot(model._loss_hist)
         plt.xlabel("step")
