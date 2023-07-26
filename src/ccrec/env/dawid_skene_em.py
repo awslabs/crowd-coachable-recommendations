@@ -23,6 +23,7 @@ class VqNet(torch.nn.Module):
 
     def set_K(self, K):
         print(f"setting K={K}")
+        self.K = K
         self.register_buffer("signal_const", torch.eye(K).reshape((1, K, K)))
         self.register_buffer(
             "noise_const",
@@ -44,7 +45,9 @@ class VqNet(torch.nn.Module):
                 @ log_theta.swapaxes(-2, -1)[jj, y]  # batch * |z|
             )
         else:
-            mask = mask[:, : self.K]  # skip n/a class if needed
+            mask = mask[
+                :, : self.K
+            ]  # mask may contain n/a class that is unwanted for training
             masked_theta_sum = torch.einsum("bzy,by->bz", theta[jj], mask)
             complete_log_lik = (
                 F.one_hot(ii, self.I).float().T  # I * batch
@@ -53,7 +56,9 @@ class VqNet(torch.nn.Module):
                 ).log()
             )
 
-        qz = complete_log_lik.softmax(-1).detach()  # stick to EM; negligible effects
+        qz = complete_log_lik.softmax(
+            -1
+        ).detach()  # stick to EM; detach has negligible effects
         Vq = (qz * complete_log_lik).sum(-1) - (qz * qz.log()).sum(-1)
 
         return qz, Vq
