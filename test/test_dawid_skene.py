@@ -17,6 +17,10 @@ def test_dawid_skene_dummy():
         [1, 0, 1, 0, 0],
     ]
     vq_net, model, snr, qz, z_hat = run_dawid_skene(
+        I, J, K, ii, jj, y, show_training_curve=False
+    )
+    print("without mask, z_hat =", z_hat)
+    vq_net, model, snr, qz, z_hat = run_dawid_skene(
         I, J, K, ii, jj, y, mask, show_training_curve=False
     )
-    print("z_hat is", z_hat)
+    print("with mask, z_hat =", z_hat)

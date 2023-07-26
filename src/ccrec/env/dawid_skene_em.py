@@ -91,6 +91,7 @@ def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
 
     data_tuples = np.asarray([ii, jj, y]).T
     if mask is not None:
+        mask = np.asarray(mask)
         assert K == mask.shape[1], "mask dimension should match K, including n/a"
         assert mask[np.arange(len(ii)), y].min() > 0, "labels must have nonzero mask"
         data_tuples = np.hstack([data_tuples, mask])
