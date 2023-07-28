@@ -1,4 +1,5 @@
 import os
+from enum import Enum
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -31,27 +32,41 @@ class VqNet(torch.nn.Module):
             / K,  # new changes after msmarco step-2-em
         )
 
-    def forward(self, ii, jj, y, mask=None):
+    def forward(self, ii, jj, y):
         theta = (
             self.snr_logit.sigmoid().reshape((-1, 1, 1)) * self.signal_const
             + (-self.snr_logit).sigmoid().reshape((-1, 1, 1)) * self.noise_const
         ) / 2
 
         # complete loglike has dimension (I * |z|)
-        if mask is None or mask.shape[1] == 0:
+        if y.ndim <= 1 or y.shape[1] <= 1:
+            y = y.ravel()
             log_theta = (theta / theta.sum(-1, keepdims=True)).log()  # J, |z|, |y|
             complete_log_lik = (
                 F.one_hot(ii, self.I).float().T  # I * batch
                 @ log_theta.swapaxes(-2, -1)[jj, y]  # batch * |z|
             )
-        else:
-            mask = mask[:, : self.K]  # skip n/a class during training
-            masked_theta_sum = torch.einsum("bzy,by->bz", theta[jj], mask.float())
-            complete_log_lik = (
-                F.one_hot(ii, self.I).float().T  # I * batch
-                @ (
-                    theta.swapaxes(-2, -1)[jj, y] / masked_theta_sum  # batch * |z|
-                ).log()
+        else:  # multi-label; for each label, (y / y.sum()) @ (theta / theta @ mask).log()
+            mask = (y > 0).float()
+            y_norm = (y - 1).float()
+            y_norm = y_norm / (y_norm * mask).sum(-1, keepdims=True)
+
+            # multiply the logits
+            complete_log_like_per_label_pos = torch.einsum(
+                "bzy,by->bz",
+                theta[jj].log(),
+                y_norm,
+            )
+
+            # this is equivalent to logsumexp
+            complete_log_like_per_label_neg = torch.einsum(
+                "bzy,by->bz",
+                theta[jj],
+                mask,
+            ).log()
+
+            complete_log_lik = F.one_hot(ii, self.I).float().T @ (  # I * batch
+                complete_log_like_per_label_pos - complete_log_like_per_label_neg
             )
 
         qz = complete_log_lik.softmax(-1).detach()  # EM calls for a detach operation
@@ -73,8 +88,8 @@ class LitModel(pl.LightningModule):
             print(self.logger.log_dir)
 
     def training_step(self, batch, batch_idx):
-        ii, jj, y, mask = batch[:, 0], batch[:, 1], batch[:, 2], batch[:, 3:]
-        _, Vq = self.vq_net(ii, jj, y, mask)
+        ii, jj, y = batch[:, 0], batch[:, 1], batch[:, 2:]
+        _, Vq = self.vq_net(ii, jj, y)
         self.log("loss", -Vq.mean())
         self._loss_hist.append(-Vq.mean().item())
         return -Vq.mean()
@@ -84,20 +99,27 @@ class LitModel(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=0.01, weight_decay=weight_decay)
 
 
-def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
-    """K is the total number of dimensions including n/a.
-    Training will exclude n/a first and then add n/a back for inference
+def train_vq(I, J, K, ii, jj, y, *, show_training_curve=True):
+    """K is the total number of dimensions.
+    For single-label y, K includes n/a class.
+    For multi-label y, no n/a class is needed. Multi-label masks are inferred by y>0.
     """
-    vq_net = VqNet(I, J, K - 1)
+    single_label = np.ndim(y) <= 1
 
-    data_tuples = np.asarray([ii, jj, y]).T
-    if mask is not None:
-        mask = np.asarray(mask)
-        assert K == mask.shape[1], "mask dimension should match K, including n/a"
-        assert mask[np.arange(len(ii)), y].min() > 0, "labels must have nonzero mask"
-        data_tuples = np.hstack([data_tuples, mask])
+    # For single_label, we assume a "none of the above" option as the last class name.
+    # This class is positionally biased and excluded during training for worker SNRs.
+    vq_net = VqNet(I, J, K - single_label)
 
-    unbiased_data = data_tuples[data_tuples[:, 2] < K - 1]  # y from 0 to K - 2
+    y = np.asarray(y)
+    if single_label:
+        assert 0 <= y.min() <= y.max() < K, "single label must be between [0, K)"
+        data_tuples = np.asarray([ii, jj, y]).T
+        unbiased_data = data_tuples[y < K - 1]  # unbiased single label between [0, K-1)
+
+    else:  # multi_label
+        assert K == y.shape[1], "multi-label must agree with class dimension K"
+        data_tuples = np.hstack([np.asarray([ii, jj]).T, y])
+        unbiased_data = data_tuples  # multi-label does not use n/a class
 
     train_loader = DataLoader(unbiased_data, batch_size=unbiased_data.shape[0])
     trainer = pl.Trainer(
@@ -128,7 +150,6 @@ def train_vq(I, J, K, ii, jj, y, mask=None, *, show_training_curve=True):
             torch.as_tensor(ii),
             torch.as_tensor(jj),
             torch.as_tensor(y),
-            torch.as_tensor(mask) if mask is not None else None,
         )
         qz = qz.detach().cpu().numpy()
     z_hat = qz.argmax(-1)
