@@ -48,25 +48,31 @@ class VqNet(torch.nn.Module):
             )
         else:  # multi-label; for each label, (y / y.sum()) @ (theta / theta @ mask).log()
             mask = (y > 0).float()
-            y_norm = (y - 1).float()
-            y_norm = y_norm / (y_norm * mask).sum(-1, keepdims=True)
+            y_norm = (y - 1).float() * mask
+            y_norm = y_norm / torch.where(
+                y_norm.any(-1, keepdims=True),
+                y_norm.sum(-1, keepdims=True),
+                1,
+            )  # batch * |y|
 
-            # multiply the logits
-            complete_log_like_per_label_pos = torch.einsum(
+            theta_per_label = (
+                theta[jj]
+                / torch.where(
+                    mask.any(-1, keepdims=True),
+                    torch.einsum("bzy,by->bz", theta[jj], mask),
+                    1,
+                )[:, :, None]
+            )  # batch * |z| * |y|
+
+            complete_log_lik_per_label = torch.einsum(
                 "bzy,by->bz",
-                theta[jj].log(),
+                theta_per_label.log(),
                 y_norm,
             )
 
-            # this is equivalent to logsumexp
-            complete_log_like_per_label_neg = torch.einsum(
-                "bzy,by->bz",
-                theta[jj],
-                mask,
-            ).log()
-
-            complete_log_lik = F.one_hot(ii, self.I).float().T @ (  # I * batch
-                complete_log_like_per_label_pos - complete_log_like_per_label_neg
+            complete_log_lik = (
+                F.one_hot(ii, self.I).float().T  # I * batch
+                @ complete_log_lik_per_label  # batch * |z|
             )
 
         qz = complete_log_lik.softmax(-1).detach()  # EM calls for a detach operation
@@ -125,6 +131,7 @@ def train_vq(I, J, K, ii, jj, y, *, show_training_curve=True):
     trainer = pl.Trainer(
         max_epochs=500,
         gpus=int(torch.cuda.is_available()),
+        detect_anomaly=True,
     )
     model = LitModel(vq_net)
 
