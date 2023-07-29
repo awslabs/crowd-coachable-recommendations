@@ -25,7 +25,7 @@ def test_dawid_skene_dummy(multi_label):
         ]
 
     vq_net, model, snr, qz, z_hat = run_dawid_skene(
-        I, J, K, ii, jj, y, show_training_curve=False
+        I, J, K, ii, jj, y, plot_training_curve=False
     )
     print("z_hat =", z_hat, "snr=", snr)
 
