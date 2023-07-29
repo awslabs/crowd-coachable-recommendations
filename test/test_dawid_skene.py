@@ -57,9 +57,9 @@ def test_dawid_skene_simulation(multi_label, seed=42, plot=False, check_accuracy
     jj = rng.choice(J, N)
     y = [rng.choice(K, p=get_p(z_true[i], snr_true[j], K)) for i, j in zip(ii, jj)]
     if multi_label:
-        mask = (rng.rand(N, K) < 0.5).astype(int)
-        mask[np.arange(N), y] = mask[np.arange(N), y] * 5
-        y = mask
+        y_with_mask = (rng.rand(N, K) < 0.5).astype(int)  # mask
+        y_with_mask[np.arange(N), y] = y_with_mask[np.arange(N), y] * 5
+        y = y_with_mask
 
     vq_net, model, snr, qz, z_hat = run_dawid_skene(
         I, J, K, ii, jj, y, plot_training_curve=plot

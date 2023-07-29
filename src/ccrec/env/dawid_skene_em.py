@@ -1,5 +1,4 @@
 import os
-from enum import Enum
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -46,7 +45,7 @@ class VqNet(torch.nn.Module):
                 F.one_hot(ii, self.I).float().T  # I * batch
                 @ log_theta.swapaxes(-2, -1)[jj, y]  # batch * |z|
             )
-        else:  # multi-label; for each label, (y / y.sum()) @ (theta / theta @ mask).log()
+        else:  # multi-label; for each label, y_norm @ (theta / theta @ mask).log()
             mask = (y > 0).float()
             y_norm = (y - 1).float() * mask
             y_norm = y_norm / torch.where(
