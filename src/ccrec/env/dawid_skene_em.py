@@ -105,7 +105,7 @@ class LitModel(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=0.01, weight_decay=weight_decay)
 
 
-def train_vq(I, J, K, ii, jj, y, *, show_training_curve=True):
+def train_vq(I, J, K, ii, jj, y, *, plot_training_curve=True):
     """K is the total number of dimensions.
     For single-label y, K includes n/a class.
     For multi-label y, no n/a class is needed. Multi-label masks are inferred by y>0.
@@ -140,7 +140,7 @@ def train_vq(I, J, K, ii, jj, y, *, show_training_curve=True):
         train_dataloaders=train_loader,
     )
 
-    if show_training_curve:
+    if plot_training_curve:
         import matplotlib.pyplot as plt
 
         plt.figure(figsize=(3, 2))

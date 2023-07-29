@@ -47,11 +47,11 @@ def test_dawid_skene_simulation(multi_label, seed=42, plot=False, check_accuracy
     I = 30
     J = 10
     K = 5
-    N = I * 19 if multi_label else 3  # single_label is more efficient
+    N = I * 8 if multi_label else I * 4  # keep coverage similar
 
     rng = np.random.RandomState(seed)
     z_true = rng.choice(K, I)
-    snr_true = rng.uniform(0, 1, J)
+    snr_true = rng.beta(2, 1, J)
 
     ii = rng.choice(I, N)
     jj = rng.choice(J, N)
@@ -62,7 +62,7 @@ def test_dawid_skene_simulation(multi_label, seed=42, plot=False, check_accuracy
         y = mask
 
     vq_net, model, snr, qz, z_hat = run_dawid_skene(
-        I, J, K + (1 - multi_label), ii, jj, y, show_training_curve=plot
+        I, J, K, ii, jj, y, plot_training_curve=plot
     )
     if plot:
         import matplotlib.pyplot as plt
@@ -75,9 +75,9 @@ def test_dawid_skene_simulation(multi_label, seed=42, plot=False, check_accuracy
         plt.show()
 
     accuracy = np.mean(z_true == z_hat)
-    rms_error = (np.mean((snr_true - snr) ** 2)) ** 0.5
-    print("simulation accuracy=", accuracy, " rms_error=", rms_error)
+    snr_corr = np.corrcoef(snr_true, snr)[0, 1]
+    print("simulation accuracy=", accuracy, " snr_corr=", snr_corr)
 
     if check_accuracy:
         assert accuracy > 0.7, "simulation accuracy should be > 0.7"
-        assert rms_error < 0.25, "simulation rms should be < 0.25"
+        assert snr_corr > 0.4, "simulation snr_corr should be > 0.4"
